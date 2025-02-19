@@ -97,7 +97,3 @@ $ forge test
 ```
 
 Generate test coverage and output result to the terminal:
-
-## License
-
-This project is licensed under MIT.
