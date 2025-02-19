@@ -10,10 +10,11 @@ import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "./interfaces/IPriceFeed.sol";
 import "./interfaces/IKeyring.sol";
 
-/// @title ParetoDollar - A stablecoin minted 1:1 against approved collateral tokens
+/// @title ParetoDollar - A synthetic dollar minted 1:1 against approved collateral tokens
 /// @notice Users can mint ParetoDollar (USP) by depositing supported collateral tokens and redeem USP for collateral tokens.
 /// Minting enforces a minimum collateral price threshold (0.99 USD normalized to 18 decimals) using primary and fallback oracles,
 /// while redemption does not enforce this check.
+/// Collateral will be deposited in Pareto Credit Vaults to earn yield.
 contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
   using SafeERC20 for IERC20;
 
@@ -200,15 +201,15 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
 
   /// @notice Owner can add a new collateral token.
   /// @param token The collateral token address.
-  /// @param priceFeed The primary oracle address.
   /// @param tokenDecimals The decimals for the collateral token.
+  /// @param priceFeed The primary oracle address.
   /// @param priceFeedDecimals The decimals for the primary oracle.
   /// @param fallbackPriceFeed The fallback oracle address (can be address(0) if not used).
   /// @param fallbackPriceFeedDecimals The decimals for the fallback oracle.
   function addCollateral(
     address token,
-    address priceFeed,
     uint8 tokenDecimals,
+    address priceFeed,
     uint8 priceFeedDecimals,
     address fallbackPriceFeed,
     uint8 fallbackPriceFeedDecimals
