@@ -4,14 +4,15 @@
   "version": "1.0.0",
   "author": {
     "name": "Idle DAO Team",
-    "url": "https://github.com/pareto-credit"
+    "url": "https://github.com/pareto-credit/usp"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.0.1",
-    "@openzeppelin/contracts-upgradeable": "^5.2.0"
+    "@openzeppelin/contracts": "^5.2.0",
+    "@openzeppelin/contracts-upgradeable": "^5.2.0",
+    "@openzeppelin/foundry-upgrades": "^0.4.0",
+    "forge-std": "foundry-rs/forge-std"
   },
   "devDependencies": {
-    "forge-std": "github:foundry-rs/forge-std#v1.8.1",
     "prettier": "^3.0.0",
     "solhint": "^3.6.2"
   },

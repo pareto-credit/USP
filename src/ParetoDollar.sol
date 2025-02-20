@@ -79,20 +79,15 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
   /// Initialize methods ///
   //////////////////////////
 
-  /// @notice Initializes the contract in the constructor so that implementation contract cannot 
-  /// be maliciously initialized.
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
-    __ERC20_init(NAME, SYMBOL);
+    _disableInitializers();
   }
 
   /// @notice Initializer (replaces constructor for upgradeable contracts).
-  function initialize() public initializer {
-    // checks if the contract is already initialized
-    if (keccak256(abi.encode(symbol())) == keccak256(abi.encode(SYMBOL))) revert AlreadyInitialized();
-
+  function initialize(address _owner) public initializer {
     __ERC20_init(NAME, SYMBOL);
-    __Ownable_init(msg.sender);
+    __Ownable_init(_owner);
     __Pausable_init();
     __ReentrancyGuard_init();
   }
@@ -213,7 +208,9 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
     uint8 priceFeedDecimals,
     address fallbackPriceFeed,
     uint8 fallbackPriceFeedDecimals
-  ) external onlyOwner {
+  ) external {
+    _checkOwner();
+
     if (token == address(0) || priceFeed == address(0)) revert InvalidData();
     collateralInfo[token] = CollateralInfo({
       allowed: true,
@@ -228,7 +225,9 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
 
   /// @notice Owner can remove a collateral token.
   /// @param token The collateral token address to remove.
-  function removeCollateral(address token) external onlyOwner {
+  function removeCollateral(address token) external {
+    _checkOwner();
+
     if (token == address(0)) revert InvalidData();
     collateralInfo[token].allowed = false;
     emit CollateralRemoved(token);
@@ -237,7 +236,9 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
   /// @notice update keyring address
   /// @param _keyring address of the keyring contract
   /// @param _keyringPolicyId policyId to check for wallet
-  function setKeyringParams(address _keyring, uint256 _keyringPolicyId) external onlyOwner {
+  function setKeyringParams(address _keyring, uint256 _keyringPolicyId) external {
+    _checkOwner();
+
     keyring = _keyring;
     keyringPolicyId = _keyringPolicyId;
   }
@@ -245,17 +246,21 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
   /// @notice Emergency function for the owner to withdraw collateral tokens.
   /// @param token The collateral token address.
   /// @param amount The amount to withdraw.
-  function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
+  function emergencyWithdraw(address token, uint256 amount) external {
+    _checkOwner();
+
     IERC20(token).safeTransfer(msg.sender, amount);
   }
 
   /// @notice Owner can pause the contract in emergencies.
-  function pause() external onlyOwner {
+  function pause() external {
+    _checkOwner();
     _pause();
   }
 
   /// @notice Owner can unpause the contract.
-  function unpause() external onlyOwner {
+  function unpause() external {
+    _checkOwner();
     _unpause();
   }
 }
