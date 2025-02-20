@@ -1,5 +1,7 @@
 # directories
 cache
+cache_hardhat
+artifacts
 coverage
 node_modules
 out
@@ -14,6 +16,7 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 doc.md
+TODO.md
 
 # broadcasts
 !broadcast
