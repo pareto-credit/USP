@@ -73,15 +73,12 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
     }
 
     CollateralInfo memory info = collateralInfo[collateralToken];
-    if (!info.allowed) revert CollateralNotAllowed();
-
-    uint256 price = getOraclePrice(
-      info.priceFeed,
-      info.priceFeedDecimals,
-      info.fallbackPriceFeed,
-      info.fallbackPriceFeedDecimals
-    );
-    if (price < MIN_PRICE) revert CollateralPriceBelowThreshold();
+    if (!info.allowed) {
+      revert CollateralNotAllowed();
+    }
+    if (getOraclePrice(collateralToken) < MIN_PRICE) {
+      revert CollateralPriceBelowThreshold();      
+    }
 
     IERC20(collateralToken).safeTransferFrom(msg.sender, address(this), amount);
     uint256 scaledAmount = amount * 10 ** (18 - info.tokenDecimals);
@@ -113,23 +110,39 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   //////////////////////
 
   /// @notice Retrieves the oracle price for collateral and normalizes it to 18 decimals.
+  /// @param token The collateral token address.
+  /// @return price The normalized price (18 decimals).
+  function getOraclePrice(address token) public view returns (uint256 price) {
+    CollateralInfo memory info = collateralInfo[token];
+    if (!info.allowed) {
+      revert CollateralNotAllowed();
+    }
+    price = _getOraclePrice(
+      info.priceFeed,
+      info.priceFeedDecimals,
+      info.fallbackPriceFeed,
+      info.fallbackPriceFeedDecimals
+    );
+  }
+
+  /// @notice Retrieves the oracle price for collateral and normalizes it to 18 decimals.
   /// @param primaryOracle The primary oracle address.
   /// @param primaryDecimals The decimals for the primary oracle.
   /// @param fallbackOracle The fallback oracle address.
   /// @param fallbackDecimals The decimals for the fallback oracle.
   /// @return price The normalized price (18 decimals).
-  function getOraclePrice(
+  function _getOraclePrice(
     address primaryOracle,
     uint8 primaryDecimals,
     address fallbackOracle,
     uint8 fallbackDecimals
-  ) public view returns (uint256 price) {
-    price = _getOracleData(primaryOracle, primaryDecimals);
+  ) internal view returns (uint256 price) {
+    price = _getScaledOracleAnswer(primaryOracle, primaryDecimals);
     if (price > 0) {
       return price;
     }
     if (fallbackOracle != address(0)) {
-      price = _getOracleData(fallbackOracle, fallbackDecimals);
+      price = _getScaledOracleAnswer(fallbackOracle, fallbackDecimals);
       if (price > 0) {
         return price;
       }
@@ -141,9 +154,9 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   /// @param oracle The oracle address.
   /// @param feedDecimals The decimals for the oracle.
   /// @return price The normalized price (18 decimals).
-  function _getOracleData(address oracle, uint8 feedDecimals) internal view returns (uint256) {
+  function _getScaledOracleAnswer(address oracle, uint8 feedDecimals) internal view returns (uint256) {
     (,int256 answer,,uint256 updatedAt,) = IPriceFeed(oracle).latestRoundData();
-    if (updatedAt >= block.timestamp - 1 hours && answer > 0) {
+    if (updatedAt >= block.timestamp - 6 hours && answer > 0) {
       return uint256(answer) * 10 ** (18 - feedDecimals);
     }
     return 0;

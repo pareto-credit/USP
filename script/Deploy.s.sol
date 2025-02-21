@@ -10,10 +10,10 @@ import { Constants } from "../src/Constants.sol";
 
 contract DeployScript is Script, Constants {
   function run() public broadcast {
-    _deploy();
+    _deploy(true);
   }
 
-  function _deploy() public returns (ParetoDollar par) {
+  function _deploy(bool shouldLog) public returns (ParetoDollar par) {
     // Deploy ParetoDollar with transparent proxy
     // check https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades for more info
     address proxy = Upgrades.deployTransparentProxy(
@@ -23,13 +23,15 @@ contract DeployScript is Script, Constants {
     );
     par = ParetoDollar(proxy);
 
-    console.log('ParetoDollar deployed at:', address(par));
-    // Get the implementation address of the proxy
-    address implAddr = Upgrades.getImplementationAddress(proxy);
-    console.log('Proxy implementation address:', implAddr);
-    // Get the admin address of the proxy
-    address proxyAdmin = Upgrades.getAdminAddress(proxy);
-    console.log('Proxy admin address:', proxyAdmin);
+    if (shouldLog) {
+      console.log('ParetoDollar deployed at:', address(par));
+      // Get the implementation address of the proxy
+      address implAddr = Upgrades.getImplementationAddress(proxy);
+      console.log('Proxy implementation address:', implAddr);
+      // Get the admin address of the proxy
+      address proxyAdmin = Upgrades.getAdminAddress(proxy);
+      console.log('Proxy admin address:', proxyAdmin);
+    }
 
     // Set keyring params
     par.setKeyringParams(KEYRING_WHITELIST, KEYRING_POLICY);
