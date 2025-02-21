@@ -9,38 +9,15 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "./interfaces/IPriceFeed.sol";
 import "./interfaces/IKeyring.sol";
+import "./interfaces/IParetoDollar.sol";
 
 /// @title ParetoDollar - A synthetic dollar minted 1:1 against approved collateral tokens
 /// @notice Users can mint ParetoDollar (USP) by depositing supported collateral tokens and redeem USP for collateral tokens.
 /// Minting enforces a minimum collateral price threshold (0.99 USD normalized to 18 decimals) using primary and fallback oracles,
 /// while redemption does not enforce this check.
 /// Collateral will be deposited in Pareto Credit Vaults to earn yield.
-contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
   using SafeERC20 for IERC20;
-
-  /////////////////////////
-  /// Errors and Events ///
-  /////////////////////////
-
-  error CollateralNotAllowed();
-  error InvalidOraclePrice();
-  error CollateralPriceBelowThreshold();
-  error InsufficientCollateral();
-  error InvalidData();
-  error AlreadyInitialized();
-  error NotAllowed();
-
-  event CollateralAdded(
-    address indexed token,
-    address priceFeed,
-    address fallbackPriceFeed,
-    uint8 tokenDecimals,
-    uint8 priceFeedDecimals,
-    uint8 fallbackPriceFeedDecimals
-  );
-  event CollateralRemoved(address indexed token);
-  event Minted(address indexed user, address indexed collateralToken, uint256 collateralAmount, uint256 uspminted);
-  event Redeemed(address indexed user, address indexed collateralToken, uint256 uspburned, uint256 collateralReturned);
 
   /////////////////
   /// Constants ///
@@ -56,16 +33,6 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
   /////////////////////////
   /// Storage variables ///
   /////////////////////////
-
-  /// @notice Information about each allowed collateral token.
-  struct CollateralInfo {
-    bool allowed;
-    address priceFeed;               // Primary oracle address
-    address fallbackPriceFeed;       // Optional fallback oracle address
-    uint8 tokenDecimals;             // Collateral token decimals (e.g., 6 for USDC, 18 for DAI)
-    uint8 priceFeedDecimals;         // Primary oracle decimals (e.g., 8 for many Chainlink feeds)
-    uint8 fallbackPriceFeedDecimals; // Fallback oracle decimals
-  }
 
   /// @notice Mapping from collateral token address to its info.
   mapping(address => CollateralInfo) public collateralInfo;
@@ -85,9 +52,9 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
   }
 
   /// @notice Initializer (replaces constructor for upgradeable contracts).
-  function initialize(address _owner) public initializer {
+  function initialize() public initializer {
     __ERC20_init(NAME, SYMBOL);
-    __Ownable_init(_owner);
+    __Ownable_init(msg.sender);
     __Pausable_init();
     __ReentrancyGuard_init();
   }
@@ -188,6 +155,13 @@ contract ParetoDollar is ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeab
   function isWalletAllowed(address _user) public view returns (bool) {
     address _keyring = keyring;
     return _keyring == address(0) || IKeyring(_keyring).checkCredential(keyringPolicyId, _user);
+  }
+
+  /// @notice Get collateral info for a specific token.
+  /// @param token The collateral token address.
+  /// @return info The collateral info.
+  function getCollateralInfo(address token) external view returns (CollateralInfo memory) {
+    return collateralInfo[token];
   }
 
   ///////////////////////

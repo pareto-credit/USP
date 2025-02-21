@@ -19,7 +19,7 @@ contract DeployScript is Script, Constants {
     address proxy = Upgrades.deployTransparentProxy(
       "ParetoDollar.sol",
       DEPLOYER, // INITIAL_OWNER_ADDRESS_FOR_PROXY_ADMIN,
-      abi.encodeCall(ParetoDollar.initialize, (DEPLOYER))
+      abi.encodeCall(ParetoDollar.initialize, ())
     );
     par = ParetoDollar(proxy);
 
@@ -37,9 +37,9 @@ contract DeployScript is Script, Constants {
     // Add USDC collateral
     par.addCollateral(
       USDC,
-      USDC_FEED_DECIMALS,
-      USDC_FEED,
       IERC20Metadata(USDC).decimals(),
+      USDC_FEED,
+      USDC_FEED_DECIMALS,
       USDC_FALLBACK_FEED,
       USDC_FALLBACK_FEED_DECIMALS
     );
@@ -47,9 +47,9 @@ contract DeployScript is Script, Constants {
     // Add USDT collateral
     par.addCollateral(
       USDT,
-      USDT_FEED_DECIMALS,
-      USDT_FEED,
       IERC20Metadata(USDT).decimals(),
+      USDT_FEED,
+      USDT_FEED_DECIMALS,
       USDT_FALLBACK_FEED,
       USDT_FALLBACK_FEED_DECIMALS
     );
