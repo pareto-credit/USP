@@ -34,7 +34,7 @@ interface IParetoDollar {
 
   function getCollateralInfo(address collateralToken) external view returns (CollateralInfo memory);
   function getOraclePrice(address token) external view returns (uint256 price);
-  function mint(address collateralToken, uint256 amount) external;
-  function redeem(address collateralToken, uint256 uspAmount) external;
+  function mint(address collateralToken, uint256 amount) external returns (uint256);
+  function redeem(address collateralToken, uint256 uspAmount) external returns (uint256);
   function isWalletAllowed(address _user) external view returns (bool);
 }

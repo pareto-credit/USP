@@ -64,10 +64,11 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   ////////////////////////
 
   /// @notice Mint USP by depositing an allowed collateral token.
+  /// @dev Only mints if the collateral's normalized price is at least 0.99 USD.
   /// @param collateralToken The collateral token address.
   /// @param amount The amount of collateral tokens to deposit.
-  /// @dev Only mints if the collateral's normalized price is at least 0.99 USD.
-  function mint(address collateralToken, uint256 amount) external whenNotPaused nonReentrant {
+  /// @return scaledAmount The amount of USP minted (in 18 decimals).
+  function mint(address collateralToken, uint256 amount) external whenNotPaused nonReentrant returns (uint256 scaledAmount) {
     if (!isWalletAllowed(msg.sender)) {
       revert NotAllowed();
     }
@@ -81,16 +82,17 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
     }
 
     IERC20(collateralToken).safeTransferFrom(msg.sender, address(this), amount);
-    uint256 scaledAmount = amount * 10 ** (18 - info.tokenDecimals);
+    scaledAmount = amount * 10 ** (18 - info.tokenDecimals);
     _mint(msg.sender, scaledAmount);
     emit Minted(msg.sender, collateralToken, amount, scaledAmount);
   }
 
   /// @notice Redeem USP for a specific collateral token.
+  /// @dev Redemption does not enforce the price threshold.
   /// @param collateralToken The collateral token address.
   /// @param uspAmount The amount of USP to redeem (in 18 decimals).
-  /// @dev Redemption does not enforce the price threshold.
-  function redeem(address collateralToken, uint256 uspAmount) external whenNotPaused nonReentrant {
+  /// @return collateralAmount The amount of collateral tokens redeemed.
+  function redeem(address collateralToken, uint256 uspAmount) external whenNotPaused nonReentrant returns (uint256 collateralAmount) {
     if (!isWalletAllowed(msg.sender)) {
       revert NotAllowed();
     }
@@ -98,7 +100,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
     if (!info.allowed) revert CollateralNotAllowed();
 
     _burn(msg.sender, uspAmount);
-    uint256 collateralAmount = uspAmount / (10 ** (18 - info.tokenDecimals));
+    collateralAmount = uspAmount / (10 ** (18 - info.tokenDecimals));
     if (collateralAmount > IERC20(collateralToken).balanceOf(address(this))) revert InsufficientCollateral();
 
     IERC20(collateralToken).safeTransfer(msg.sender, collateralAmount);

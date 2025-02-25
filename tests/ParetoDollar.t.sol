@@ -232,8 +232,9 @@ contract TestParetoDollar is Test, DeployScript {
     par.mint(USDC, 100);
     vm.clearMockedCalls();
 
-    par.mint(USDC, 1e6);
+    uint256 mintedAmount = par.mint(USDC, 1e6);
 
+    assertEq(mintedAmount, 1e18, 'Should mint 1 USP token');
     assertEq(IERC20Metadata(USDC).balanceOf(address(this)), 0, 'Minter has no more balance');
     assertEq(IERC20Metadata(address(par)).balanceOf(address(this)), 1e18, 'Minter has 1 USP token');
   }
@@ -265,14 +266,13 @@ contract TestParetoDollar is Test, DeployScript {
 
     uint256 usdcBalPre = IERC20Metadata(USDC).balanceOf(address(this));
 
-    par.redeem(USDC, redeemAmount);
+    uint256 collateralAmount = par.redeem(USDC, redeemAmount);
 
     uint256 parBalPost = IERC20Metadata(address(par)).balanceOf(address(this));
     uint256 usdcBalPost = IERC20Metadata(USDC).balanceOf(address(this));
 
+    assertEq(collateralAmount, amount, 'Collateral amount should be equal to the deposited amount');
     assertEq(parBalPost, 0, 'PAR balance should decrease by the redeemed amount');
     assertEq(usdcBalPost, usdcBalPre + amount, 'USDC balance should increase by the redeemed amount');
   }
-
-  // TODO add return values for mint and redeem
 }
