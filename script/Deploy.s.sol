@@ -6,6 +6,7 @@ import { console } from "forge-std/console.sol";
 import { Upgrades } from "@openzeppelin/foundry-upgrades/Upgrades.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { ParetoDollar } from "../src/ParetoDollar.sol";
+import { ParetoDollarStaking } from "../src/ParetoDollarStaking.sol";
 import { Constants } from "../src/Constants.sol";
 
 contract DeployScript is Script, Constants {
@@ -13,7 +14,7 @@ contract DeployScript is Script, Constants {
     _deploy(true);
   }
 
-  function _deploy(bool shouldLog) public returns (ParetoDollar par) {
+  function _deploy(bool shouldLog) public returns (ParetoDollar par, ParetoDollarStaking sPar) {
     // Deploy ParetoDollar with transparent proxy
     // check https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades for more info
     address proxy = Upgrades.deployTransparentProxy(
@@ -23,14 +24,30 @@ contract DeployScript is Script, Constants {
     );
     par = ParetoDollar(proxy);
 
+    // Deploy ParetoDollarStaking with transparent proxy
+    address sProxy = Upgrades.deployTransparentProxy(
+      "ParetoDollarStaking.sol",
+      DEPLOYER,
+      abi.encodeCall(ParetoDollarStaking.initialize, (address(par)))
+    );
+    sPar = ParetoDollarStaking(sProxy);
+
     if (shouldLog) {
       console.log('ParetoDollar deployed at:', address(par));
-      // Get the implementation address of the proxy
+      // Get the implementation address of the proxy for ParetoDollar
       address implAddr = Upgrades.getImplementationAddress(proxy);
-      console.log('Proxy implementation address:', implAddr);
-      // Get the admin address of the proxy
+      console.log('Proxy implementation address for ParetoDollar:', implAddr);
+      // Get the admin address of the proxy for ParetoDollar
       address proxyAdmin = Upgrades.getAdminAddress(proxy);
-      console.log('Proxy admin address:', proxyAdmin);
+      console.log('Proxy admin address for ParetoDollar:', proxyAdmin);
+
+      console.log('ParetoDollarStaking deployed at:', address(sPar));
+      // Get the implementation address of the proxy for ParetoDollarStaking
+      address sImplAddr = Upgrades.getImplementationAddress(sProxy);
+      console.log('Proxy implementation address for ParetoDollarStaking:', sImplAddr);
+      // Get the admin address of the proxy for ParetoDollarStaking
+      address sProxyAdmin = Upgrades.getAdminAddress(sProxy);
+      console.log('Proxy admin address for ParetoDollarStaking:', sProxyAdmin);
     }
 
     // Set keyring params

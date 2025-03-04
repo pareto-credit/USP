@@ -14,7 +14,6 @@ import { IKeyring } from "../src/interfaces/IKeyring.sol";
 import { DeployScript, Constants } from "../script/Deploy.s.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-
 contract TestParetoDollar is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
   ParetoDollar par;
@@ -23,7 +22,7 @@ contract TestParetoDollar is Test, DeployScript {
     vm.createSelectFork("mainnet", 21836743);
 
     vm.startPrank(DEPLOYER);
-    (par) = _deploy(false);
+    (par,) = _deploy(false);
     vm.stopPrank();
 
     skip(100);
