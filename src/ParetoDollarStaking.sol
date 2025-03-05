@@ -16,6 +16,12 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   using SafeERC20 for IERC20;
 
   //////////////
+  /// Errors ///
+  //////////////
+
+  error FeeTooHigh();
+
+  //////////////
   /// Events ///
   //////////////
 
@@ -29,6 +35,10 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   string public constant SYMBOL = "sUSP";
   /// @notice Token name.
   string public constant NAME = "Pareto staked USP";
+  /// @notice reference value for 100% fee
+  uint256 public constant FEE_100 = 100_000; // 100% fee
+  /// @notice max fee
+  uint256 public constant MAX_FEE = 20_000; // max fee is 20%
 
   /////////////////////////
   /// Storage variables ///
@@ -40,6 +50,10 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   uint256 public rewards;
   /// @notice Timestamp when rewards were last deposited.
   uint256 public rewardsLastDeposit;
+  /// @notice fee on interest earned
+  uint256 public fee;
+  /// @notice address to receive fees
+  address public feeReceiver;
 
   //////////////////////////
   /// Initialize methods ///
@@ -59,6 +73,8 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     __ReentrancyGuard_init();
 
     rewardsVesting = 7 days;
+    fee = FEE_100 / 20; // 5%
+    feeReceiver = msg.sender;
   }
 
   ////////////////////////
@@ -100,17 +116,39 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     rewardsVesting = _rewardsVesting;
   }
 
+  /// @notice Update the fee parameters.
+  /// @param _fee The new fee.
+  /// @param _feeReceiver The new fee receiver.
+  function updateFeeParams(uint256 _fee, address _feeReceiver) external {
+    _checkOwner();
+    if (_fee > MAX_FEE) {
+      revert FeeTooHigh();
+    }
+    fee = _fee;
+    feeReceiver = _feeReceiver;
+  }
+
   /// @notice Deposit rewards to the contract.
   /// @dev if method is called when prev rewards are not yet vested, old rewards become vested
   /// @param amount The amount of rewards to deposit.
   function depositRewards(uint256 amount) external {
     _checkOwner();
-    rewards = amount;
-    rewardsLastDeposit = block.timestamp;
     // transfer rewards from caller to this contract
     IERC20(asset()).safeTransferFrom(msg.sender, address(this), amount);
 
-    emit RewardsDeposited(amount);
+    uint256 _fee = fee;
+    uint256 _feeAmount;
+    if (_fee > 0) {
+      // transfer fees to fee receiver
+      _feeAmount = amount * _fee / FEE_100;
+      IERC20(asset()).safeTransfer(feeReceiver, _feeAmount); // use _feeAmount here
+    }
+
+    // update rewards data
+    rewards = amount - _feeAmount;
+    rewardsLastDeposit = block.timestamp;
+
+    emit RewardsDeposited(amount - _feeAmount);
   }
 
   /// @notice Emergency function for the owner to withdraw collateral tokens.

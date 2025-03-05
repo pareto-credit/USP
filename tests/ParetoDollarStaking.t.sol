@@ -37,6 +37,9 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(sPar.symbol(), 'sUSP', 'symbol is wrong');
     assertEq(sPar.owner(), DEPLOYER, 'owner is wrong');
     assertEq(sPar.decimals(), 18, 'decimals is wrong');
+    assertEq(sPar.rewardsVesting(), 7 days, 'rewardsVesting is wrong');
+    assertEq(sPar.fee(), 5_000, 'fee is wrong');
+    assertEq(sPar.feeReceiver(), DEPLOYER, 'feeReceiver is wrong');
 
     assertEq(sPar.totalSupply(), 0, 'totalSupply is wrong');
     assertEq(sPar.balanceOf(DEPLOYER), 0, 'DEPLOYER balance is wrong');
@@ -105,6 +108,10 @@ contract TestParetoDollarStaking is Test, DeployScript {
     uint256 depositAmount = 1e18;
     uint256 shares = _stake(address(this), depositAmount);
 
+    // set fees to 0
+    vm.prank(sPar.owner());
+    sPar.updateFeeParams(0, address(this));
+
     // give sPar some interest by depositing par tokens directly
     give(address(par), address(sPar), depositAmount);
     assertApproxEqAbs(sPar.convertToAssets(shares), depositAmount * 2, 1, 'Balance should reflect the deposit amount + interest');
@@ -129,6 +136,10 @@ contract TestParetoDollarStaking is Test, DeployScript {
   function testDepositRewards() external {
     uint256 depositAmount = 1e18;
     _stake(address(this), depositAmount);
+
+    // set fees to 0
+    vm.prank(sPar.owner());
+    sPar.updateFeeParams(0, address(this));
 
     depositRewards(depositAmount);
 
@@ -157,6 +168,23 @@ contract TestParetoDollarStaking is Test, DeployScript {
     vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
     sPar.depositRewards(depositAmount);
     vm.stopPrank();
+
+    // set fees to 10%
+    address feeReceiver = makeAddr('feeReceiver');
+    vm.startPrank(sPar.owner());
+    sPar.updateFeeParams(sPar.FEE_100() / 10, feeReceiver);
+    vm.stopPrank();
+    
+    uint256 depositAmount2 = 1e18;
+    depositRewards(depositAmount2);
+    uint256 expectedFees = depositAmount2 / 10;
+    uint256 expectedRewards = depositAmount2 - expectedFees;
+
+    assertEq(sPar.rewards(), expectedRewards, 'Rewards should be deposited and fees should be taken');
+    assertEq(par.balanceOf(feeReceiver), expectedFees, 'Fees should be transferred to feeReceiver');
+
+    skip(sPar.rewardsVesting() + 1);
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 39 / 10, 1, 'Total assets have rewards vested minus fee');
   }
 
   function testUpdateRewardsVesting() external {
@@ -170,6 +198,24 @@ contract TestParetoDollarStaking is Test, DeployScript {
     sPar.updateRewardsVesting(1 days);
   }
 
+  function testUpdateFeeParams() external {
+    vm.prank(sPar.owner());
+    sPar.updateFeeParams(1_000, address(this));
+    assertEq(sPar.fee(), 1_000, 'Fee should be 1_000');
+    assertEq(sPar.feeReceiver(), address(this), 'FeeReceiver should be address(this)');
+
+    // test with non owner
+    vm.prank(address(this));
+    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    sPar.updateFeeParams(1_000, address(this));
+
+    // test fee too high
+    uint256 maxFee = sPar.MAX_FEE();
+    vm.prank(sPar.owner());
+    vm.expectRevert(bytes4(keccak256("FeeTooHigh()")));
+    sPar.updateFeeParams(maxFee + 1, address(this));
+  }
+
   function _stake(address _who, uint256 _amount) internal returns (uint256 shares) {
     deal(address(par), address(_who), _amount);
     vm.startPrank(_who);
@@ -180,10 +226,13 @@ contract TestParetoDollarStaking is Test, DeployScript {
 
   function depositRewards(uint256 _amount) internal {
     give(address(par), address(sPar.owner()), _amount);
+    uint256 expectedFees = _amount * sPar.fee() / sPar.FEE_100();
+    uint256 expectedRewards = _amount - expectedFees;
+
     vm.startPrank(sPar.owner());
     par.approve(address(sPar), _amount);
     vm.expectEmit(address(sPar));
-    emit RewardsDeposited(_amount);
+    emit RewardsDeposited(expectedRewards);
     sPar.depositRewards(_amount);
     vm.stopPrank();
   }
