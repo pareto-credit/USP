@@ -20,14 +20,18 @@ contract DeployScript is Script, Constants {
     address proxy = Upgrades.deployTransparentProxy(
       "ParetoDollar.sol",
       TL_MULTISIG, // INITIAL_OWNER_ADDRESS_FOR_PROXY_ADMIN,
-      abi.encodeCall(ParetoDollar.initialize, ())
+      abi.encodeCall(
+        ParetoDollar.initialize, (
+          TL_MULTISIG,
+          HYPERNATIVE_PAUSER
+        )
+      )
     );
     par = ParetoDollar(proxy);
 
+    // Deploy ParetoDollarStaking with transparent proxy
     address[] memory managers = new address[](1);
     managers[0] = TL_MULTISIG;
-
-    // Deploy ParetoDollarStaking with transparent proxy
     address sProxy = Upgrades.deployTransparentProxy(
       "ParetoDollarStaking.sol",
       TL_MULTISIG,
@@ -41,24 +45,6 @@ contract DeployScript is Script, Constants {
       )
     );
     sPar = ParetoDollarStaking(sProxy);
-
-    if (shouldLog) {
-      console.log('ParetoDollar deployed at:', address(par));
-      // Get the implementation address of the proxy for ParetoDollar
-      address implAddr = Upgrades.getImplementationAddress(proxy);
-      console.log('Proxy implementation address for ParetoDollar:', implAddr);
-      // Get the admin address of the proxy for ParetoDollar
-      address proxyAdmin = Upgrades.getAdminAddress(proxy);
-      console.log('Proxy admin address for ParetoDollar:', proxyAdmin);
-
-      console.log('ParetoDollarStaking deployed at:', address(sPar));
-      // Get the implementation address of the proxy for ParetoDollarStaking
-      address sImplAddr = Upgrades.getImplementationAddress(sProxy);
-      console.log('Proxy implementation address for ParetoDollarStaking:', sImplAddr);
-      // Get the admin address of the proxy for ParetoDollarStaking
-      address sProxyAdmin = Upgrades.getAdminAddress(sProxy);
-      console.log('Proxy admin address for ParetoDollarStaking:', sProxyAdmin);
-    }
 
     // Set keyring params
     par.setKeyringParams(KEYRING_WHITELIST, KEYRING_POLICY);
@@ -82,6 +68,27 @@ contract DeployScript is Script, Constants {
       USDT_FALLBACK_FEED,
       USDT_FALLBACK_FEED_DECIMALS
     );
+
+    // transfer ownership of ParetoDollar to TL_MULTISIG
+    par.transferOwnership(TL_MULTISIG);
+
+    if (shouldLog) {
+      console.log('ParetoDollar deployed at:', address(par));
+      // Get the implementation address of the proxy for ParetoDollar
+      address implAddr = Upgrades.getImplementationAddress(proxy);
+      console.log('Proxy implementation address for ParetoDollar:', implAddr);
+      // Get the admin address of the proxy for ParetoDollar
+      address proxyAdmin = Upgrades.getAdminAddress(proxy);
+      console.log('Proxy admin address for ParetoDollar:', proxyAdmin);
+
+      console.log('ParetoDollarStaking deployed at:', address(sPar));
+      // Get the implementation address of the proxy for ParetoDollarStaking
+      address sImplAddr = Upgrades.getImplementationAddress(sProxy);
+      console.log('Proxy implementation address for ParetoDollarStaking:', sImplAddr);
+      // Get the admin address of the proxy for ParetoDollarStaking
+      address sProxyAdmin = Upgrades.getAdminAddress(sProxy);
+      console.log('Proxy admin address for ParetoDollarStaking:', sProxyAdmin);
+    }
   }
 
   modifier broadcast() {

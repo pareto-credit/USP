@@ -3,6 +3,7 @@ pragma solidity >=0.8.28 <0.9.0;
 
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
 
 import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
@@ -31,13 +32,17 @@ contract TestParetoDollar is Test, DeployScript {
   function testInitialize() external view {
     assertEq(par.name(), 'Pareto synthetic dollar USP', 'name is wrong');
     assertEq(par.symbol(), 'USP', 'symbol is wrong');
-    assertEq(par.owner(), DEPLOYER, 'owner is wrong');
+    assertEq(par.owner(), TL_MULTISIG, 'owner is wrong');
 
     assertEq(par.totalSupply(), 0, 'totalSupply is wrong');
     assertEq(par.balanceOf(DEPLOYER), 0, 'DEPLOYER balance is wrong');
+    assertEq(par.balanceOf(TL_MULTISIG), 0, 'TL_MULTISIG balance is wrong');
 
     assertEq(par.keyring(), KEYRING_WHITELIST, 'keyring is wrong');
     assertEq(par.keyringPolicyId(), KEYRING_POLICY, 'keyring policy is wrong');
+    assertEq(par.hasRole(par.DEFAULT_ADMIN_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have DEFAULT_ADMIN_ROLE');
+    assertEq(par.hasRole(par.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
+    assertEq(par.hasRole(par.PAUSER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have PAUSER_ROLE');
 
     IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     
@@ -120,17 +125,17 @@ contract TestParetoDollar is Test, DeployScript {
 
     deal(USDC, address(par), 100);
 
-    uint256 balPre = IERC20Metadata(USDC).balanceOf(DEPLOYER);
+    uint256 balPre = IERC20Metadata(USDC).balanceOf(par.owner());
 
     vm.startPrank(par.owner());
     par.emergencyWithdraw(USDC, 100);
-    uint256 balPost = IERC20Metadata(USDC).balanceOf(DEPLOYER);
-    assertEq(balPost, balPre + 100, 'DEPLOYER balance should increase by 100');
+    uint256 balPost = IERC20Metadata(USDC).balanceOf(par.owner());
+    assertEq(balPost, balPre + 100, 'owner balance should increase by 100');
     vm.stopPrank();
   }
 
   function testPause() external {
-    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), par.PAUSER_ROLE()));
     par.pause();
 
     vm.startPrank(par.owner());
@@ -148,6 +153,42 @@ contract TestParetoDollar is Test, DeployScript {
     par.unpause();
 
     assertEq(par.paused(), false, 'The contract should not be paused');
+    vm.stopPrank();
+  }
+
+  function testRoles() external {
+    bytes32 pauser = par.PAUSER_ROLE();
+    bytes32 defaultAdmin = par.DEFAULT_ADMIN_ROLE();
+
+    bytes memory defaultError = abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), defaultAdmin);
+
+    // if non admin tries to grant role, it reverts
+    vm.expectRevert(defaultError);
+    par.grantRole(pauser, address(this));
+    vm.expectRevert(defaultError);
+    par.grantRole(defaultAdmin, address(this));
+
+    // if non admin tries to removke role, it reverts
+    vm.expectRevert(defaultError);
+    par.revokeRole(pauser, address(this));
+    vm.expectRevert(defaultError);
+    par.revokeRole(defaultAdmin, address(this));
+
+    // admin can grant roles
+    address admin = TL_MULTISIG;
+    vm.startPrank(admin);
+    par.grantRole(pauser, address(this));
+    par.grantRole(defaultAdmin, address(this));
+    assertEq(par.hasRole(pauser, address(this)), true, 'address(this) should have PAUSER_ROLE');
+    assertEq(par.hasRole(defaultAdmin, address(this)), true, 'address(this) should have DEFAULT_ADMIN_ROLE');
+    vm.stopPrank();
+
+    // admin can revoke roles
+    vm.startPrank(admin);
+    par.revokeRole(pauser, address(this));
+    par.revokeRole(defaultAdmin, address(this));
+    assertEq(par.hasRole(pauser, address(this)), false, 'address(this) should not have PAUSER_ROLE');
+    assertEq(par.hasRole(defaultAdmin, address(this)), false, 'address(this) should not have DEFAULT_ADMIN_ROLE');
     vm.stopPrank();
   }
 

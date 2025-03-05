@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "./interfaces/IPriceFeed.sol";
 import "./interfaces/IKeyring.sol";
 import "./interfaces/IParetoDollar.sol";
@@ -16,7 +17,7 @@ import "./interfaces/IParetoDollar.sol";
 /// Minting enforces a minimum collateral price threshold (0.99 USD normalized to 18 decimals) using primary and fallback oracles,
 /// while redemption does not enforce this check.
 /// Collateral will be deposited in Pareto Credit Vaults to earn yield.
-contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, AccessControlUpgradeable {
   using SafeERC20 for IERC20;
 
   /////////////////
@@ -29,6 +30,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   string public constant SYMBOL = "USP";
   /// @notice Token name.
   string public constant NAME = "Pareto synthetic dollar USP";
+  /// @notice role for pausing the contract
+  bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
   /////////////////////////
   /// Storage variables ///
@@ -52,11 +55,20 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   }
 
   /// @notice Initializer (replaces constructor for upgradeable contracts).
-  function initialize() public initializer {
+  function initialize(
+    address _admin,
+    address _pauser
+  ) public initializer {
     __ERC20_init(NAME, SYMBOL);
     __Ownable_init(msg.sender);
     __Pausable_init();
     __ReentrancyGuard_init();
+    __AccessControl_init();
+
+    // manage roles
+    _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+    _grantRole(PAUSER_ROLE, _admin);
+    _grantRole(PAUSER_ROLE, _pauser);
   }
 
   ////////////////////////
@@ -237,13 +249,12 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   /// @param amount The amount to withdraw.
   function emergencyWithdraw(address token, uint256 amount) external {
     _checkOwner();
-
     IERC20(token).safeTransfer(msg.sender, amount);
   }
 
   /// @notice Owner can pause the contract in emergencies.
   function pause() external {
-    _checkOwner();
+    _checkRole(PAUSER_ROLE);
     _pause();
   }
 
