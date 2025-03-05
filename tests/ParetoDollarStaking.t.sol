@@ -20,6 +20,8 @@ contract TestParetoDollarStaking is Test, DeployScript {
   ParetoDollar par;
   ParetoDollarStaking sPar;
 
+  event RewardsDeposited(uint256 amount);
+
   function setUp() public virtual {
     vm.createSelectFork("mainnet", 21836743);
 
@@ -101,24 +103,81 @@ contract TestParetoDollarStaking is Test, DeployScript {
 
   function testRedeemWithInterest() external {
     uint256 depositAmount = 1e18;
-    _stake(address(this), depositAmount);
+    uint256 shares = _stake(address(this), depositAmount);
 
     // give sPar some interest by depositing par tokens directly
     give(address(par), address(sPar), depositAmount);
-    sPar.redeem(depositAmount, address(this), address(this));
-    uint256 balPost = par.balanceOf(address(this));
+    assertApproxEqAbs(sPar.convertToAssets(shares), depositAmount * 2, 1, 'Balance should reflect the deposit amount + interest');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 2, 1, 'Total assets should reflect the deposit amount + interest');
 
-    assertApproxEqAbs(balPost, depositAmount * 2, 1, 'Balance should reflect the deposit amount + interest');
+    depositRewards(depositAmount);
+    assertApproxEqAbs(sPar.convertToAssets(shares), depositAmount * 2, 1, 'Balance should be equal then before because rewards are not vested yet');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 2, 1, 'Total assets should be equal then before because rewards are not vested yet');
+
+    skip(sPar.rewardsVesting() / 2);
+    assertApproxEqAbs(sPar.convertToAssets(shares), depositAmount * 25 / 10, 2, 'Balance should have rewards half vested');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 25 / 10, 2, 'Total assets should have rewards half vested');
+
+    skip(sPar.rewardsVesting() / 2 + 1);
+    assertApproxEqAbs(sPar.convertToAssets(shares), depositAmount * 3, 2, 'Balance should have rewards fully vested');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 3, 2, 'Total assets should have rewards fully vested');
+
+    sPar.redeem(depositAmount, address(this), address(this));
+    assertApproxEqAbs(par.balanceOf(address(this)), depositAmount * 3, 2, 'Balance should reflect the deposit amount + interest and vested rewards');
   }
 
-  function _stake(address _who, uint256 _amount) internal {
-    deal(address(par), address(_who), _amount);
-    vm.startPrank(_who);
-    par.approve(address(sPar), _amount);
-    sPar.deposit(_amount, _who);
+  function testDepositRewards() external {
+    uint256 depositAmount = 1e18;
+    _stake(address(this), depositAmount);
+
+    depositRewards(depositAmount);
+
+    assertEq(sPar.rewards(), depositAmount, 'Rewards should be deposited');
+    assertEq(sPar.rewardsLastDeposit(), block.timestamp, 'RewardsLastDeposit should be updated');
+
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount, 1, 'Total assets should have no rewards vested');
+    // we only vest half of the rewards
+    skip(sPar.rewardsVesting() / 2);
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 15 / 10, 1, 'Total assets have prev rewards partially vested');
+
+    // we deposit again before the end of the vesting period, prev rewards are now fully vested
+    depositRewards(depositAmount);
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 2, 1, 'Total assets have prev rewards fully vested');
+    assertEq(sPar.rewards(), depositAmount, 'New rewards should be deposited');
+    assertEq(sPar.rewardsLastDeposit(), block.timestamp, 'RewardsLastDeposit should be updated again');
+
+    skip(sPar.rewardsVesting() / 2);
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 25 / 10, 1, 'Total assets have second tranche of rewards partially vested');
+
+    skip(sPar.rewardsVesting() / 2);
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 3, 1, 'Total assets have second tranche of rewards fully vested');
+
+    // deposit rewards cannot be called by non owner
+    vm.startPrank(address(this));
+    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    sPar.depositRewards(depositAmount);
     vm.stopPrank();
   }
 
+  function _stake(address _who, uint256 _amount) internal returns (uint256 shares) {
+    deal(address(par), address(_who), _amount);
+    vm.startPrank(_who);
+    par.approve(address(sPar), _amount);
+    shares = sPar.deposit(_amount, _who);
+    vm.stopPrank();
+  }
+
+  function depositRewards(uint256 _amount) internal {
+    give(address(par), address(sPar.owner()), _amount);
+    vm.startPrank(sPar.owner());
+    par.approve(address(sPar), _amount);
+    vm.expectEmit(address(sPar));
+    emit RewardsDeposited(_amount);
+    sPar.depositRewards(_amount);
+    vm.stopPrank();
+  }
+
+  // donate assets (ie increase balance of _who)
   function give(address _token, address _who, uint256 _amount) internal {
     deal(_token, address(1), _amount);
     vm.prank(address(1));

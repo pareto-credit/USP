@@ -15,6 +15,12 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgrad
 contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
   using SafeERC20 for IERC20;
 
+  //////////////
+  /// Events ///
+  //////////////
+
+  event RewardsDeposited(uint256 amount);
+
   /////////////////
   /// Constants ///
   /////////////////
@@ -28,6 +34,12 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   /// Storage variables ///
   /////////////////////////
 
+  /// @notice Rewards vesting period in seconds.
+  uint256 public rewardsVesting;
+  /// @notice Amount of rewards to release.
+  uint256 public rewards;
+  /// @notice Timestamp when rewards were last deposited.
+  uint256 public rewardsLastDeposit;
 
   //////////////////////////
   /// Initialize methods ///
@@ -45,6 +57,8 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     __Ownable_init(msg.sender);
     __Pausable_init();
     __ReentrancyGuard_init();
+
+    rewardsVesting = 7 days;
   }
 
   ////////////////////////
@@ -61,9 +75,36 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     return 18;
   }
 
+  /// @dev See {IERC4626-totalAssets}. Interest is vested over a period of time and is not immediately claimable.
+  function totalAssets() public view override returns (uint256) {
+    uint256 _rewardsVesting = rewardsVesting;
+    uint256 _rewards = rewards;
+    uint256 _timeSinceLastDeposit = block.timestamp - rewardsLastDeposit;
+    // calculate unvested rewards
+    uint256 unvestedRewards;
+    if (_timeSinceLastDeposit < _rewardsVesting) {
+      unvestedRewards = _rewards - (_rewards * _timeSinceLastDeposit / _rewardsVesting);
+    }
+    // return total assets minus unvested rewards
+    return IERC20(asset()).balanceOf(address(this)) - unvestedRewards;
+  }
+
   ///////////////////////
   /// Admin functions ///
   ///////////////////////
+
+  /// @notice Deposit rewards to the contract.
+  /// @dev if method is called when prev rewards are not yet vested, old rewards become vested
+  /// @param amount The amount of rewards to deposit.
+  function depositRewards(uint256 amount) external {
+    _checkOwner();
+    rewards = amount;
+    rewardsLastDeposit = block.timestamp;
+    // transfer rewards from caller to this contract
+    IERC20(asset()).safeTransferFrom(msg.sender, address(this), amount);
+
+    emit RewardsDeposited(amount);
+  }
 
   /// @notice Emergency function for the owner to withdraw collateral tokens.
   /// @param token The collateral token address.
