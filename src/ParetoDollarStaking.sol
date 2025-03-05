@@ -93,6 +93,13 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   /// Admin functions ///
   ///////////////////////
 
+  /// @notice Update the rewards vesting period.
+  /// @param _rewardsVesting The new rewards vesting period.
+  function updateRewardsVesting(uint256 _rewardsVesting) external {
+    _checkOwner();
+    rewardsVesting = _rewardsVesting;
+  }
+
   /// @notice Deposit rewards to the contract.
   /// @dev if method is called when prev rewards are not yet vested, old rewards become vested
   /// @param amount The amount of rewards to deposit.

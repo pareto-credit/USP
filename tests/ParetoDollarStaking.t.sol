@@ -159,6 +159,17 @@ contract TestParetoDollarStaking is Test, DeployScript {
     vm.stopPrank();
   }
 
+  function testUpdateRewardsVesting() external {
+    vm.prank(sPar.owner());
+    sPar.updateRewardsVesting(2 days);
+    assertEq(sPar.rewardsVesting(), 2 days, 'RewardsVesting should be 2 days');
+
+    // test with non owner
+    vm.prank(address(this));
+    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    sPar.updateRewardsVesting(1 days);
+  }
+
   function _stake(address _who, uint256 _amount) internal returns (uint256 shares) {
     deal(address(par), address(_who), _amount);
     vm.startPrank(_who);
