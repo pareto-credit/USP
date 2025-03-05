@@ -19,16 +19,26 @@ contract DeployScript is Script, Constants {
     // check https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades for more info
     address proxy = Upgrades.deployTransparentProxy(
       "ParetoDollar.sol",
-      DEPLOYER, // INITIAL_OWNER_ADDRESS_FOR_PROXY_ADMIN,
+      TL_MULTISIG, // INITIAL_OWNER_ADDRESS_FOR_PROXY_ADMIN,
       abi.encodeCall(ParetoDollar.initialize, ())
     );
     par = ParetoDollar(proxy);
 
+    address[] memory managers = new address[](1);
+    managers[0] = TL_MULTISIG;
+
     // Deploy ParetoDollarStaking with transparent proxy
     address sProxy = Upgrades.deployTransparentProxy(
       "ParetoDollarStaking.sol",
-      DEPLOYER,
-      abi.encodeCall(ParetoDollarStaking.initialize, (address(par)))
+      TL_MULTISIG,
+      abi.encodeCall(
+        ParetoDollarStaking.initialize, (
+          address(par),
+          TL_MULTISIG,
+          HYPERNATIVE_PAUSER,
+          managers
+        )
+      )
     );
     sPar = ParetoDollarStaking(sProxy);
 

@@ -5,14 +5,14 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 
 /// @title ParetoDollarStaking - A staking contract for ParetoDollar
 /// @notice Users can stake ParetoDollar to earn yield from Pareto Credit Vaults. 
 /// on deposits a staked version of the token is minted (sUSP) and can be redeemed for ParetoDollar after a cooldown period.
-contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable {
+contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable, AccessControlUpgradeable {
   using SafeERC20 for IERC20;
 
   //////////////
@@ -39,6 +39,10 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   uint256 public constant FEE_100 = 100_000; // 100% fee
   /// @notice max fee
   uint256 public constant MAX_FEE = 20_000; // max fee is 20%
+  /// @notice role for pausing the contract
+  bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+  /// @notice role for managing the contract (can deposit rewards)
+  bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
   /////////////////////////
   /// Storage variables ///
@@ -65,16 +69,36 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   }
 
   /// @notice Initializer (replaces constructor for upgradeable contracts).
-  function initialize(address _paretoDollar) public initializer {
+  /// @param _paretoDollar The address of the ParetoDollar contract.
+  /// @param _admin The address of the admin.
+  /// @param _pauser The address of the pauser.
+  /// @param _managers The addresses of the managers.
+  function initialize(
+    address _paretoDollar,
+    address _admin,
+    address _pauser,
+    address[] memory _managers
+  ) public initializer {
     __ERC20_init(NAME, SYMBOL);
     __ERC4626_init(IERC20(_paretoDollar));
-    __Ownable_init(msg.sender);
+    __Ownable_init(_admin);
     __Pausable_init();
-    __ReentrancyGuard_init();
+    __AccessControl_init();
 
+    // manage roles
+    _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+    _grantRole(PAUSER_ROLE, _admin);
+    _grantRole(MANAGER_ROLE, _admin);
+    _grantRole(PAUSER_ROLE, _pauser);
+
+    for (uint256 i = 0; i < _managers.length; i++) {
+      _grantRole(MANAGER_ROLE, _managers[i]);
+    }
+
+    // set initial values
     rewardsVesting = 7 days;
     fee = FEE_100 / 20; // 5%
-    feeReceiver = msg.sender;
+    feeReceiver = _admin;
   }
 
   ////////////////////////
@@ -132,7 +156,7 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   /// @dev if method is called when prev rewards are not yet vested, old rewards become vested
   /// @param amount The amount of rewards to deposit.
   function depositRewards(uint256 amount) external {
-    _checkOwner();
+    _checkRole(MANAGER_ROLE);
     // transfer rewards from caller to this contract
     IERC20(asset()).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -159,9 +183,9 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     IERC20(token).safeTransfer(msg.sender, amount);
   }
 
-  /// @notice Owner can pause the contract in emergencies.
+  /// @notice Pauser can pause the contract in emergencies.
   function pause() external {
-    _checkOwner();
+    _checkRole(PAUSER_ROLE);
     _pause();
   }
 

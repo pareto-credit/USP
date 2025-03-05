@@ -8,6 +8,8 @@ contract Constants {
   // TODO confirm values for keyring whitelist and policy
   address public constant KEYRING_WHITELIST = 0x6351370a1c982780Da2D8c85DfedD421F7193Fa5;
   uint256 public constant KEYRING_POLICY = 4;
+  // TODO check address
+  address public constant HYPERNATIVE_PAUSER = 0xBaeCba470C229984b75BC860EFe8e97AE082Bb9f;
   // USDC feed data
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
   address public constant USDC_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;

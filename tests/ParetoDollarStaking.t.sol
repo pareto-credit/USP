@@ -2,6 +2,9 @@
 pragma solidity >=0.8.28 <0.9.0;
 
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
+
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import { Test } from "forge-std/Test.sol";
@@ -35,14 +38,19 @@ contract TestParetoDollarStaking is Test, DeployScript {
   function testInitialize() external view {
     assertEq(sPar.name(), 'Pareto staked USP', 'name is wrong');
     assertEq(sPar.symbol(), 'sUSP', 'symbol is wrong');
-    assertEq(sPar.owner(), DEPLOYER, 'owner is wrong');
+    assertEq(sPar.owner(), TL_MULTISIG, 'owner is wrong');
     assertEq(sPar.decimals(), 18, 'decimals is wrong');
     assertEq(sPar.rewardsVesting(), 7 days, 'rewardsVesting is wrong');
     assertEq(sPar.fee(), 5_000, 'fee is wrong');
-    assertEq(sPar.feeReceiver(), DEPLOYER, 'feeReceiver is wrong');
+    assertEq(sPar.feeReceiver(), TL_MULTISIG, 'feeReceiver is wrong');
 
     assertEq(sPar.totalSupply(), 0, 'totalSupply is wrong');
-    assertEq(sPar.balanceOf(DEPLOYER), 0, 'DEPLOYER balance is wrong');
+    assertEq(sPar.balanceOf(TL_MULTISIG), 0, 'DEPLOYER balance is wrong');
+
+    assertEq(sPar.hasRole(sPar.DEFAULT_ADMIN_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have DEFAULT_ADMIN_ROLE');
+    assertEq(sPar.hasRole(sPar.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
+    assertEq(sPar.hasRole(sPar.PAUSER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have PAUSER_ROLE');
+    assertEq(sPar.hasRole(sPar.MANAGER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have MANAGER_ROLE');
   }
 
   function testEmergencyWithdraw() external {
@@ -51,22 +59,67 @@ contract TestParetoDollarStaking is Test, DeployScript {
 
     deal(USDC, address(sPar), 100);
 
-    uint256 balPre = IERC20Metadata(USDC).balanceOf(DEPLOYER);
+    uint256 balPre = IERC20Metadata(USDC).balanceOf(sPar.owner());
 
     vm.startPrank(sPar.owner());
     sPar.emergencyWithdraw(USDC, 100);
-    uint256 balPost = IERC20Metadata(USDC).balanceOf(DEPLOYER);
-    assertEq(balPost, balPre + 100, 'DEPLOYER balance should increase by 100');
+    uint256 balPost = IERC20Metadata(USDC).balanceOf(sPar.owner());
+    assertEq(balPost, balPre + 100, 'owner balance should increase by 100');
     vm.stopPrank();
   }
 
   function testPause() external {
-    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), sPar.PAUSER_ROLE()));
     sPar.pause();
 
     vm.startPrank(sPar.owner());
     sPar.pause();
     assertEq(sPar.paused(), true, 'The contract should be paused');
+    vm.stopPrank();
+  }
+
+  function testRoles() external {
+    bytes32 manager = sPar.MANAGER_ROLE();
+    bytes32 pauser = sPar.PAUSER_ROLE();
+    bytes32 defaultAdmin = sPar.DEFAULT_ADMIN_ROLE();
+
+    bytes memory defaultError = abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), defaultAdmin);
+
+    // if non admin tries to grant role, it reverts
+    vm.expectRevert(defaultError);
+    sPar.grantRole(manager, address(this));
+    vm.expectRevert(defaultError);
+    sPar.grantRole(pauser, address(this));
+    vm.expectRevert(defaultError);
+    sPar.grantRole(defaultAdmin, address(this));
+
+    // if non admin tries to removke role, it reverts
+    vm.expectRevert(defaultError);
+    sPar.revokeRole(manager, address(this));
+    vm.expectRevert(defaultError);
+    sPar.revokeRole(pauser, address(this));
+    vm.expectRevert(defaultError);
+    sPar.revokeRole(defaultAdmin, address(this));
+
+    // admin can grant roles
+    address admin = TL_MULTISIG;
+    vm.startPrank(admin);
+    sPar.grantRole(manager, address(this));
+    sPar.grantRole(pauser, address(this));
+    sPar.grantRole(defaultAdmin, address(this));
+    assertEq(sPar.hasRole(manager, address(this)), true, 'address(this) should have MANAGER_ROLE');
+    assertEq(sPar.hasRole(pauser, address(this)), true, 'address(this) should have PAUSER_ROLE');
+    assertEq(sPar.hasRole(defaultAdmin, address(this)), true, 'address(this) should have DEFAULT_ADMIN_ROLE');
+    vm.stopPrank();
+
+    // admin can revoke roles
+    vm.startPrank(admin);
+    sPar.revokeRole(manager, address(this));
+    sPar.revokeRole(pauser, address(this));
+    sPar.revokeRole(defaultAdmin, address(this));
+    assertEq(sPar.hasRole(manager, address(this)), false, 'address(this) should not have MANAGER_ROLE');
+    assertEq(sPar.hasRole(pauser, address(this)), false, 'address(this) should not have PAUSER_ROLE');
+    assertEq(sPar.hasRole(defaultAdmin, address(this)), false, 'address(this) should not have DEFAULT_ADMIN_ROLE');
     vm.stopPrank();
   }
 
@@ -163,9 +216,9 @@ contract TestParetoDollarStaking is Test, DeployScript {
     skip(sPar.rewardsVesting() / 2);
     assertApproxEqAbs(sPar.totalAssets(), depositAmount * 3, 1, 'Total assets have second tranche of rewards fully vested');
 
-    // deposit rewards cannot be called by non owner
+    // deposit rewards cannot be called by non managers
     vm.startPrank(address(this));
-    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), sPar.MANAGER_ROLE()));
     sPar.depositRewards(depositAmount);
     vm.stopPrank();
 
