@@ -101,11 +101,6 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     feeReceiver = _admin;
   }
 
-  ////////////////////////
-  /// Public functions ///
-  ////////////////////////
-
-  
   //////////////////////
   /// View functions ///
   //////////////////////
@@ -164,6 +159,7 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     uint256 _feeAmount;
     if (_fee > 0) {
       // transfer fees to fee receiver
+      // if funds are donated to the contract with direct transfer, fees won't be accounted on the donated amount
       _feeAmount = amount * _fee / FEE_100;
       IERC20(asset()).safeTransfer(feeReceiver, _feeAmount); // use _feeAmount here
     }
