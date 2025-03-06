@@ -101,6 +101,24 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     feeReceiver = _admin;
   }
 
+  //////////////////////////
+  /// Internal functions ///
+  //////////////////////////
+
+  /// @dev See {ERC4626Upgradeable-_deposit}.
+  /// @dev if paused, deposits are not allowed
+  function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
+    _requireNotPaused();
+    super._deposit(caller, receiver, assets, shares);
+  }
+
+  /// @dev See {ERC4626Upgradeable-_withdraw}.
+  /// @dev if paused, withdraws are not allowed
+  function _withdraw(address caller, address receiver, address _owner, uint256 assets, uint256 shares) internal override {
+    _requireNotPaused();
+    super._withdraw(caller, receiver, _owner, assets, shares);
+  }
+
   //////////////////////
   /// View functions ///
   //////////////////////

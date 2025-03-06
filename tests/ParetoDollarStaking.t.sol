@@ -4,6 +4,7 @@ pragma solidity >=0.8.28 <0.9.0;
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
+import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
@@ -69,12 +70,20 @@ contract TestParetoDollarStaking is Test, DeployScript {
   }
 
   function testPause() external {
+    _stake(address(this), 1e18);
+
     vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), sPar.PAUSER_ROLE()));
     sPar.pause();
 
     vm.startPrank(sPar.owner());
     sPar.pause();
     assertEq(sPar.paused(), true, 'The contract should be paused');
+
+    // when paused no deposits or redeems can be made
+    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    sPar.deposit(1e18, address(this));
+    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    sPar.redeem(1e18, address(this), address(this));
     vm.stopPrank();
   }
 

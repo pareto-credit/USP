@@ -55,6 +55,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   }
 
   /// @notice Initializer (replaces constructor for upgradeable contracts).
+  /// @param _admin The admin address.
+  /// @param _pauser The pauser address.
   function initialize(
     address _admin,
     address _pauser
@@ -80,7 +82,9 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   /// @param collateralToken The collateral token address.
   /// @param amount The amount of collateral tokens to deposit.
   /// @return scaledAmount The amount of USP minted (in 18 decimals).
-  function mint(address collateralToken, uint256 amount) external whenNotPaused nonReentrant returns (uint256 scaledAmount) {
+  function mint(address collateralToken, uint256 amount) external nonReentrant returns (uint256 scaledAmount) {
+    _requireNotPaused();
+
     if (!isWalletAllowed(msg.sender)) {
       revert NotAllowed();
     }
@@ -104,7 +108,9 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   /// @param collateralToken The collateral token address.
   /// @param uspAmount The amount of USP to redeem (in 18 decimals).
   /// @return collateralAmount The amount of collateral tokens redeemed.
-  function redeem(address collateralToken, uint256 uspAmount) external whenNotPaused nonReentrant returns (uint256 collateralAmount) {
+  function redeem(address collateralToken, uint256 uspAmount) external nonReentrant returns (uint256 collateralAmount) {
+    _requireNotPaused();
+
     if (!isWalletAllowed(msg.sender)) {
       revert NotAllowed();
     }

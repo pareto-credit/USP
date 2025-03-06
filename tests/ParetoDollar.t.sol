@@ -4,6 +4,7 @@ pragma solidity >=0.8.28 <0.9.0;
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { IAccessControl } from "@openzeppelin/contracts/access/IAccessControl.sol";
+import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
@@ -141,6 +142,13 @@ contract TestParetoDollar is Test, DeployScript {
     vm.startPrank(par.owner());
     par.pause();
     assertEq(par.paused(), true, 'The contract should be paused');
+    vm.stopPrank();
+
+    // when paused no mints or redeems can be made
+    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    par.mint(USDC, 1e6);
+    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    par.redeem(USDC, 1e6);
     vm.stopPrank();
   }
 
