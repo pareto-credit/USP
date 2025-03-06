@@ -8,11 +8,12 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "./EmergencyUtils.sol";
 
 /// @title ParetoDollarStaking - A staking contract for ParetoDollar
 /// @notice Users can stake ParetoDollar to earn yield from Pareto Credit Vaults. 
 /// on deposits a staked version of the token is minted (sUSP) and can be redeemed for ParetoDollar after a cooldown period.
-contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpgradeable, PausableUpgradeable, AccessControlUpgradeable {
+contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyUtils {
   using SafeERC20 for IERC20;
 
   //////////////
@@ -39,8 +40,6 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   uint256 public constant FEE_100 = 100_000; // 100% fee
   /// @notice max fee
   uint256 public constant MAX_FEE = 20_000; // max fee is 20%
-  /// @notice role for pausing the contract
-  bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
   /// @notice role for managing the contract (can deposit rewards)
   bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
@@ -81,16 +80,10 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
   ) public initializer {
     __ERC20_init(NAME, SYMBOL);
     __ERC4626_init(IERC20(_paretoDollar));
-    __Ownable_init(_admin);
-    __Pausable_init();
-    __AccessControl_init();
+    __EmergencyUtils_init(_admin, _admin, _pauser);
 
     // manage roles
-    _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-    _grantRole(PAUSER_ROLE, _admin);
     _grantRole(MANAGER_ROLE, _admin);
-    _grantRole(PAUSER_ROLE, _pauser);
-
     for (uint256 i = 0; i < _managers.length; i++) {
       _grantRole(MANAGER_ROLE, _managers[i]);
     }
@@ -187,25 +180,5 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, OwnableUpg
     rewardsLastDeposit = block.timestamp;
 
     emit RewardsDeposited(amount - _feeAmount);
-  }
-
-  /// @notice Emergency function for the owner to withdraw collateral tokens.
-  /// @param token The collateral token address.
-  /// @param amount The amount to withdraw.
-  function emergencyWithdraw(address token, uint256 amount) external {
-    _checkOwner();
-    IERC20(token).safeTransfer(msg.sender, amount);
-  }
-
-  /// @notice Pauser can pause the contract in emergencies.
-  function pause() external {
-    _checkRole(PAUSER_ROLE);
-    _pause();
-  }
-
-  /// @notice Owner can unpause the contract.
-  function unpause() external {
-    _checkOwner();
-    _unpause();
   }
 }

@@ -11,13 +11,14 @@ import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol"
 import "./interfaces/IPriceFeed.sol";
 import "./interfaces/IKeyring.sol";
 import "./interfaces/IParetoDollar.sol";
+import "./EmergencyUtils.sol";
 
 /// @title ParetoDollar - A synthetic dollar minted 1:1 against approved collateral tokens
 /// @notice Users can mint ParetoDollar (USP) by depositing supported collateral tokens and redeem USP for collateral tokens.
 /// Minting enforces a minimum collateral price threshold (0.99 USD normalized to 18 decimals) using primary and fallback oracles,
 /// while redemption does not enforce this check.
 /// Collateral will be deposited in Pareto Credit Vaults to earn yield.
-contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, AccessControlUpgradeable {
+contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgradeable, EmergencyUtils {
   using SafeERC20 for IERC20;
 
   /////////////////
@@ -30,8 +31,6 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
   string public constant SYMBOL = "USP";
   /// @notice Token name.
   string public constant NAME = "Pareto synthetic dollar USP";
-  /// @notice role for pausing the contract
-  bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
   /////////////////////////
   /// Storage variables ///
@@ -62,15 +61,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
     address _pauser
   ) public initializer {
     __ERC20_init(NAME, SYMBOL);
-    __Ownable_init(msg.sender);
-    __Pausable_init();
     __ReentrancyGuard_init();
-    __AccessControl_init();
-
-    // manage roles
-    _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-    _grantRole(PAUSER_ROLE, _admin);
-    _grantRole(PAUSER_ROLE, _pauser);
+    __EmergencyUtils_init(msg.sender, _admin, _pauser);
   }
 
   ////////////////////////
@@ -248,25 +240,5 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, OwnableUpgradeable, Pa
 
     keyring = _keyring;
     keyringPolicyId = _keyringPolicyId;
-  }
-
-  /// @notice Emergency function for the owner to withdraw collateral tokens.
-  /// @param token The collateral token address.
-  /// @param amount The amount to withdraw.
-  function emergencyWithdraw(address token, uint256 amount) external {
-    _checkOwner();
-    IERC20(token).safeTransfer(msg.sender, amount);
-  }
-
-  /// @notice Owner can pause the contract in emergencies.
-  function pause() external {
-    _checkRole(PAUSER_ROLE);
-    _pause();
-  }
-
-  /// @notice Owner can unpause the contract.
-  function unpause() external {
-    _checkOwner();
-    _unpause();
   }
 }

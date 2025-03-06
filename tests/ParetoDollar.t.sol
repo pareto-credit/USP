@@ -44,7 +44,7 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(par.hasRole(par.DEFAULT_ADMIN_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have DEFAULT_ADMIN_ROLE');
     assertEq(par.hasRole(par.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
     assertEq(par.hasRole(par.PAUSER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have PAUSER_ROLE');
-
+    assertEq(par.isPausable(), true, 'the contract should be pausable');
     IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     
     assertEq(usdcCollateral.allowed, true, 'USDC collateral should be allowed');

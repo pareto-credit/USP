@@ -52,6 +52,7 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(sPar.hasRole(sPar.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
     assertEq(sPar.hasRole(sPar.PAUSER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have PAUSER_ROLE');
     assertEq(sPar.hasRole(sPar.MANAGER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have MANAGER_ROLE');
+    assertEq(sPar.isPausable(), true, 'the contract should be pausable');
   }
 
   function testEmergencyWithdraw() external {
