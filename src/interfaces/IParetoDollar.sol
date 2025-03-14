@@ -5,7 +5,6 @@ interface IParetoDollar {
   error CollateralNotAllowed();
   error InvalidOraclePrice();
   error CollateralPriceBelowThreshold();
-  error InsufficientCollateral();
   error InvalidData();
   error AlreadyInitialized();
   error NotAllowed();
@@ -20,7 +19,8 @@ interface IParetoDollar {
   );
   event CollateralRemoved(address indexed token);
   event Minted(address indexed user, address indexed collateralToken, uint256 collateralAmount, uint256 uspminted);
-  event Redeemed(address indexed user, address indexed collateralToken, uint256 uspburned, uint256 collateralReturned);
+  event Redeemed(address indexed user, uint256 uspburned);
+  event RedeemRequested(address indexed user, uint256 uspburned);
 
   /// @notice Information about each allowed collateral token.
   struct CollateralInfo {
@@ -33,8 +33,10 @@ interface IParetoDollar {
   }
 
   function getCollateralInfo(address collateralToken) external view returns (CollateralInfo memory);
+  function getCollaterals() external view returns (address[] memory);
   function getOraclePrice(address token) external view returns (uint256 price);
   function mint(address collateralToken, uint256 amount) external returns (uint256);
-  function redeem(address collateralToken, uint256 uspAmount) external returns (uint256);
+  function requestRedeem(uint256 uspAmount) external;
+  function claimRedeemRequest(uint256 epoch) external returns(uint256);
   function isWalletAllowed(address _user) external view returns (bool);
 }

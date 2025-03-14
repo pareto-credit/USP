@@ -10,7 +10,9 @@ import { Test } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
 
 import { ParetoDollar } from "../src/ParetoDollar.sol";
+import { ParetoDollarQueue } from "../src/ParetoDollarQueue.sol";
 import { IParetoDollar } from "../src/interfaces/IParetoDollar.sol";
+import { IParetoDollarQueue } from "../src/interfaces/IParetoDollarQueue.sol";
 import { IPriceFeed } from "../src/interfaces/IPriceFeed.sol";
 import { IKeyring } from "../src/interfaces/IKeyring.sol";
 import { DeployScript, Constants } from "../script/Deploy.s.sol";
@@ -19,12 +21,13 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 contract TestParetoDollar is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
   ParetoDollar par;
+  ParetoDollarQueue queue;
 
   function setUp() public virtual {
     vm.createSelectFork("mainnet", 21836743);
 
     vm.startPrank(DEPLOYER);
-    (par,) = _deploy(false);
+    (par,,queue) = _deploy(false);
     vm.stopPrank();
 
     skip(100);
@@ -45,8 +48,12 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(par.hasRole(par.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
     assertEq(par.hasRole(par.PAUSER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have PAUSER_ROLE');
     assertEq(par.isPausable(), true, 'the contract should be pausable');
+    assertEq(address(par.queue()) != address(0), true, 'queue should be set');
+    assertEq(address(par.queue()), address(queue), 'queue address is correct');
+
     IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     
+    assertEq(par.collaterals(0), USDC, 'First collateral should be USDC');
     assertEq(usdcCollateral.allowed, true, 'USDC collateral should be allowed');
     assertEq(usdcCollateral.priceFeed, USDC_FEED, 'USDC priceFeed should be set');
     assertEq(usdcCollateral.fallbackPriceFeed, USDC_FALLBACK_FEED, 'USDC fallbackPriceFeed should be set');
@@ -56,12 +63,18 @@ contract TestParetoDollar is Test, DeployScript {
   
     IParetoDollar.CollateralInfo memory usdtCollateral = par.getCollateralInfo(USDT);
 
+    assertEq(par.collaterals(1), USDT, 'Second collateral should be USDT');
     assertEq(usdtCollateral.allowed, true, 'USDT collateral should be allowed');
     assertEq(usdtCollateral.priceFeed, USDT_FEED, 'USDT priceFeed should be set');
     assertEq(usdtCollateral.fallbackPriceFeed, USDT_FALLBACK_FEED, 'USDT fallbackPriceFeed should be set');
     assertEq(usdtCollateral.tokenDecimals, 6, 'USDT should have 6 decimals');
     assertEq(usdtCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDT should have 8 decimals');
     assertEq(usdtCollateral.fallbackPriceFeedDecimals, USDT_FALLBACK_FEED_DECIMALS, 'Fallback price feed for USDT should have 8 decimals');
+
+    address[] memory collaterals = par.getCollaterals();
+    assertEq(collaterals.length, 2, 'There should be 2 collaterals');
+    assertEq(collaterals[0], USDC, 'First collateral address in getCollaterals should be USDC');
+    assertEq(collaterals[1], USDT, 'Second collateral address in getCollaterals should be USDT');
   }
 
   function testAddCollateral() external {
@@ -77,7 +90,8 @@ contract TestParetoDollar is Test, DeployScript {
     vm.expectRevert(IParetoDollar.InvalidData.selector);
     par.addCollateral(USDT, 6, address(0), 8, address(1), 8);
 
-
+    vm.expectEmit(true, true, true, true);
+    emit IParetoDollar.CollateralAdded(address(1), address(2), address(3), 6, 8, 10);
     par.addCollateral(address(1), 6, address(2), 8, address(3), 10);
     IParetoDollar.CollateralInfo memory newCollateral = par.getCollateralInfo(address(1));
 
@@ -87,6 +101,10 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(newCollateral.tokenDecimals, 6, 'new should have 6 decimals');
     assertEq(newCollateral.priceFeedDecimals, 8, 'Price feed for USDT should have 8 decimals');
     assertEq(newCollateral.fallbackPriceFeedDecimals, 10, 'Fallback price feed for USDT should have 8 decimals');
+
+    address[] memory collaterals = par.getCollaterals();
+    assertEq(collaterals.length, 3, 'There should be 3 collaterals');
+    assertEq(collaterals[2], address(1), 'New collateral address in getCollaterals should be address(1)');
     vm.stopPrank();
   }
 
@@ -95,15 +113,25 @@ contract TestParetoDollar is Test, DeployScript {
     par.removeCollateral(USDT);
 
     vm.startPrank(par.owner());
+    vm.expectEmit(true, true, true,true);
+    emit IParetoDollar.CollateralRemoved(USDC);
     par.removeCollateral(USDC);
 
     IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     assertEq(usdcCollateral.allowed, false, 'USDC should not be allowed');
-    assertEq(usdcCollateral.priceFeed, USDC_FEED, 'USDC feed should not be removed');
+    assertEq(usdcCollateral.priceFeed, address(0), 'USDC feed should not be removed');
+    assertEq(usdcCollateral.fallbackPriceFeed, address(0), 'USDC fallback feed should not be removed');
+    assertEq(usdcCollateral.tokenDecimals, 0, 'USDC tokenDecimals should not be removed');
+    assertEq(usdcCollateral.priceFeedDecimals, 0, 'USDC priceFeedDecimals should not be removed');
+    assertEq(usdcCollateral.fallbackPriceFeedDecimals, 0, 'USDC fallbackPriceFeedDecimals should not be removed');
 
     vm.expectRevert(IParetoDollar.InvalidData.selector);
     par.removeCollateral(address(0));
     vm.stopPrank();
+
+    address[] memory collaterals = par.getCollaterals();
+    assertEq(collaterals.length, 1, 'There should be 1 collateral');
+    assertEq(collaterals[0], USDT, 'First collateral address in getCollaterals should be USDT');
   }
 
   function testSetKeyringParams() external {
@@ -148,7 +176,9 @@ contract TestParetoDollar is Test, DeployScript {
     vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
     par.mint(USDC, 1e6);
     vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
-    par.redeem(USDC, 1e6);
+    par.requestRedeem(1e18);
+    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    par.claimRedeemRequest(1);
     vm.stopPrank();
   }
 
@@ -240,7 +270,9 @@ contract TestParetoDollar is Test, DeployScript {
     vm.expectRevert(abi.encodeWithSelector(IParetoDollar.NotAllowed.selector));
     par.mint(USDC, 1);
     vm.expectRevert(abi.encodeWithSelector(IParetoDollar.NotAllowed.selector));
-    par.redeem(USDC, 1);
+    par.requestRedeem(1);
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollar.NotAllowed.selector));
+    par.claimRedeemRequest(0);
 
     vm.clearMockedCalls();
 
@@ -254,7 +286,10 @@ contract TestParetoDollar is Test, DeployScript {
     IERC20Metadata(USDC).approve(address(par), 100);
     par.mint(USDC, 100);
 
-    par.redeem(USDC, 100);
+    par.requestRedeem(100);
+    vm.expectRevert(IParetoDollarQueue.NotReady.selector);
+    par.claimRedeemRequest(0);
+
     vm.clearMockedCalls();
   }
 
@@ -282,12 +317,14 @@ contract TestParetoDollar is Test, DeployScript {
 
     uint256 mintedAmount = par.mint(USDC, 1e6);
 
+    assertEq(IERC20Metadata(USDC).balanceOf(address(par)), 0, 'Par contract should not received collateral');
+    assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), 1e6, 'Queue contract should received collateral');
     assertEq(mintedAmount, 1e18, 'Should mint 1 USP token');
     assertEq(IERC20Metadata(USDC).balanceOf(address(this)), 0, 'Minter has no more balance');
     assertEq(IERC20Metadata(address(par)).balanceOf(address(this)), 1e18, 'Minter has 1 USP token');
   }
 
-  function testRedeem() external {
+  function testRequestRedeem() external {
     // allow anyone to mint/redeem
     vm.prank(par.owner());
     par.setKeyringParams(address(0), 1);
@@ -298,29 +335,47 @@ contract TestParetoDollar is Test, DeployScript {
   
     par.mint(USDC, amount);
 
-    vm.expectRevert(IParetoDollar.CollateralNotAllowed.selector);
-    par.redeem(address(123), 1);
-
-    uint256 redeemAmount = amount * 10**12;
-    // transfer out of the contract amount - 1;
-    vm.prank(par.owner());
-    par.emergencyWithdraw(USDC, amount);
-    vm.expectRevert(IParetoDollar.InsufficientCollateral.selector);
-    par.redeem(USDC, redeemAmount);
-
-    // return the collateral to the contract
-    vm.prank(par.owner());
-    IERC20Metadata(USDC).transfer(address(par), amount);
-
-    uint256 usdcBalPre = IERC20Metadata(USDC).balanceOf(address(this));
-
-    uint256 collateralAmount = par.redeem(USDC, redeemAmount);
+    uint256 uspAmount = 1000e18;
+    // request redemption
+    vm.expectEmit(true, true, true, true);
+    emit IParetoDollar.RedeemRequested(address(this), uspAmount);
+    par.requestRedeem(uspAmount);
 
     uint256 parBalPost = IERC20Metadata(address(par)).balanceOf(address(this));
-    uint256 usdcBalPost = IERC20Metadata(USDC).balanceOf(address(this));
-
-    assertEq(collateralAmount, amount, 'Collateral amount should be equal to the deposited amount');
     assertEq(parBalPost, 0, 'PAR balance should decrease by the redeemed amount');
-    assertEq(usdcBalPost, usdcBalPre + amount, 'USDC balance should increase by the redeemed amount');
+    assertEq(queue.userWithdrawalsEpochs(address(this), 0), uspAmount, 'Queue requestCollateral is called');
+  }
+
+  function testClaimRequestRedeem() external {
+    // allow anyone to mint/redeem
+    vm.prank(par.owner());
+    par.setKeyringParams(address(0), 1);
+
+    uint256 amount = 1000 * 1e6;
+    deal(USDC, address(this), amount);
+    IERC20Metadata(USDC).approve(address(par), amount);
+  
+    // mint 1000 USP
+    par.mint(USDC, amount);
+    // request redeem of 1000 USP
+    uint256 uspAmount = 1000e18;
+    par.requestRedeem(uspAmount);
+    // claim redeem request for epoch 0. We check simply that the inner queue method is 
+    // called and we do this by checking that it reverts with NotReady error
+    vm.expectRevert(IParetoDollarQueue.NotReady.selector);
+    par.claimRedeemRequest(0);
+
+    // mockCall for queue.claimRequestedCollateral this is used to check that the return amount of
+    // claimReedemRequest is the same return value as queue.claimRedeemRequest
+    vm.mockCall(
+      address(queue),
+      abi.encodeWithSelector(IParetoDollarQueue.claimRedeemRequest.selector),
+      abi.encode(uspAmount)
+    );
+
+    vm.expectEmit(true, true, true, true);
+    emit IParetoDollar.Redeemed(address(this), uspAmount);
+    uint256 uspAmountRequested = par.claimRedeemRequest(0);
+    assertEq(uspAmountRequested, uspAmount, 'Returned amount should be equal to requested USP amount');
   }
 }

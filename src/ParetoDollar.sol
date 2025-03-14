@@ -9,6 +9,7 @@ import "./interfaces/IPriceFeed.sol";
 import "./interfaces/IKeyring.sol";
 import "./interfaces/IParetoDollar.sol";
 import "./EmergencyUtils.sol";
+import "./ParetoDollarQueue.sol";
 
 /// @title ParetoDollar - A synthetic dollar minted 1:1 against approved collateral tokens
 /// @notice Users can mint ParetoDollar (USP) by depositing supported collateral tokens and redeem USP for collateral tokens.
@@ -35,11 +36,14 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
 
   /// @notice Mapping from collateral token address to its info.
   mapping(address => CollateralInfo) public collateralInfo;
-
+  /// @notice Collateral token list.
+  address[] public collaterals;
   /// @notice Keyring wallet checker address
   address public keyring;
   /// @notice keyring policyId
   uint256 public keyringPolicyId;
+  /// @notice Address of the queue contract for redemptions and deployments.
+  ParetoDollarQueue public queue;
 
   //////////////////////////
   /// Initialize methods ///
@@ -53,13 +57,17 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// @notice Initializer (replaces constructor for upgradeable contracts).
   /// @param _admin The admin address.
   /// @param _pauser The pauser address.
+  /// @param _queue The address of the queue contract.
   function initialize(
     address _admin,
-    address _pauser
+    address _pauser,
+    address _queue
   ) public initializer {
     __ERC20_init(NAME, SYMBOL);
     __ReentrancyGuard_init();
     __EmergencyUtils_init(msg.sender, _admin, _pauser);
+
+    queue = ParetoDollarQueue(_queue);
   }
 
   ////////////////////////
@@ -72,51 +80,64 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// @param amount The amount of collateral tokens to deposit.
   /// @return scaledAmount The amount of USP minted (in 18 decimals).
   function mint(address collateralToken, uint256 amount) external nonReentrant returns (uint256 scaledAmount) {
-    _requireNotPaused();
-
-    if (!isWalletAllowed(msg.sender)) {
-      revert NotAllowed();
-    }
-
+    // check if the contract is paused and wallet is allowed
+    _checkAllowed(msg.sender);
+    // check if the collateral token is allowed
     CollateralInfo memory info = collateralInfo[collateralToken];
     if (!info.allowed) {
       revert CollateralNotAllowed();
     }
+    // check if collateral price is above the minimum threshold
     if (getOraclePrice(collateralToken) < MIN_PRICE) {
       revert CollateralPriceBelowThreshold();      
     }
 
-    IERC20(collateralToken).safeTransferFrom(msg.sender, address(this), amount);
+    // mint ParetoDollars
     scaledAmount = amount * 10 ** (18 - info.tokenDecimals);
     _mint(msg.sender, scaledAmount);
+
+    // transfer the collateral to the queue contract
+    IERC20(collateralToken).safeTransferFrom(msg.sender, address(queue), amount);
     emit Minted(msg.sender, collateralToken, amount, scaledAmount);
   }
 
-  /// @notice Redeem USP for a specific collateral token.
-  /// @dev Redemption does not enforce the price threshold.
-  /// @param collateralToken The collateral token address.
-  /// @param uspAmount The amount of USP to redeem (in 18 decimals).
-  /// @return collateralAmount The amount of collateral tokens redeemed.
-  function redeem(address collateralToken, uint256 uspAmount) external nonReentrant returns (uint256 collateralAmount) {
-    _requireNotPaused();
+  /// @notice Request redemption of USP for collateral tokens.
+  /// @dev This function is used to request a redemption of USP for collateral tokens.
+  /// @param _uspAmount The amount of USP to redeem (18 decimals).
+  function requestRedeem(uint256 _uspAmount) external nonReentrant {
+    // check if the contract is paused and wallet is allowed
+    _checkAllowed(msg.sender);
+    // burn USP from user
+    _burn(msg.sender, _uspAmount);
+    // make the request for redemption
+    queue.requestRedeem(msg.sender, _uspAmount);
+    emit RedeemRequested(msg.sender, _uspAmount);
+  }
 
-    if (!isWalletAllowed(msg.sender)) {
-      revert NotAllowed();
-    }
-    CollateralInfo memory info = collateralInfo[collateralToken];
-    if (!info.allowed) revert CollateralNotAllowed();
-
-    _burn(msg.sender, uspAmount);
-    collateralAmount = uspAmount / (10 ** (18 - info.tokenDecimals));
-    if (collateralAmount > IERC20(collateralToken).balanceOf(address(this))) revert InsufficientCollateral();
-
-    IERC20(collateralToken).safeTransfer(msg.sender, collateralAmount);
-    emit Redeemed(msg.sender, collateralToken, uspAmount, collateralAmount);
+  /// @notice Claim collateral tokens.
+  /// @param epoch The epoch number of the request.
+  function claimRedeemRequest(uint256 epoch) external nonReentrant returns(uint256 amountRequested) {
+    // check if the contract is paused and wallet is allowed
+    _checkAllowed(msg.sender);
+    // claim the request for collateral
+    amountRequested = queue.claimRedeemRequest(msg.sender, epoch);
+    emit Redeemed(msg.sender, amountRequested);
   }
 
   //////////////////////
   /// View functions ///
   //////////////////////
+
+  /// @notice Check if the contract is paused and wallet is allowed.
+  /// @param _user The user address.
+  function _checkAllowed(address _user) internal view {
+    // check if the contract is paused
+    _requireNotPaused();
+    // check if msg.sender is allowed 
+    if (!isWalletAllowed(_user)) {
+      revert NotAllowed();
+    }
+  }
 
   /// @notice Retrieves the oracle price for collateral and normalizes it to 18 decimals.
   /// @param token The collateral token address.
@@ -190,7 +211,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// Admin functions ///
   ///////////////////////
 
-  /// @notice Owner can add a new collateral token.
+  /// @notice Add new collateral
   /// @param token The collateral token address.
   /// @param tokenDecimals The decimals for the collateral token.
   /// @param priceFeed The primary oracle address.
@@ -216,17 +237,35 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
       priceFeedDecimals: priceFeedDecimals,
       fallbackPriceFeedDecimals: fallbackPriceFeedDecimals
     });
+    // add the token to the list of collaterals
+    collaterals.push(token);
     emit CollateralAdded(token, priceFeed, fallbackPriceFeed, tokenDecimals, priceFeedDecimals, fallbackPriceFeedDecimals);
   }
 
-  /// @notice Owner can remove a collateral token.
+  /// @notice Remove collateral
   /// @param token The collateral token address to remove.
   function removeCollateral(address token) external {
     _checkOwner();
 
     if (token == address(0)) revert InvalidData();
-    collateralInfo[token].allowed = false;
+    delete collateralInfo[token];
+    // remove the token from the list of collaterals
+    address[] memory _collaterals = collaterals;
+    uint256 collateralsLen = _collaterals.length;
+    for (uint256 i = 0; i < collateralsLen; i++) {
+      if (_collaterals[i] == token) {
+        collaterals[i] = _collaterals[collateralsLen - 1];
+        collaterals.pop();
+        break;
+      }
+    }
     emit CollateralRemoved(token);
+  }
+
+  /// @notice Retrieve the list of collateral tokens.
+  /// @return The list of collateral token addresses.
+  function getCollaterals() external view returns (address[] memory) {
+    return collaterals;
   }
 
   /// @notice update keyring address
