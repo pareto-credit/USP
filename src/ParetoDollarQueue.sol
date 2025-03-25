@@ -177,8 +177,6 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     epochPending[_epoch] += _amount;
     // update total amount reserved for withdrawals
     totReservedWithdrawals += _amount;
-
-    emit WithdrawRequested(_receiver, _amount, _epoch);
   }
 
   /// @notice allow the ParetoDollar contract to claim requested collateral tokens from this contract
@@ -238,7 +236,6 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     // update the total amount reserved for withdrawals
     totReservedWithdrawals -= amount;
 
-    emit WithdrawRequestClaimed(_receiver, amount, _epoch);
     return amount;
   }
 

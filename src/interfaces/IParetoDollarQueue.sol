@@ -20,8 +20,6 @@ interface IParetoDollarQueue {
   event YieldSourceDeposit(address indexed source, address indexed token, uint256 amount);
   event YieldSourceRedeem(address indexed source, address indexed token, uint256 amount);
   event YieldSourceCall(address indexed source, bytes4 indexed method, bytes args);
-  event WithdrawRequested(address indexed user, uint256 amount, uint256 epoch);
-  event WithdrawRequestClaimed(address indexed user, uint256 amount, uint256 epoch);
   event NewEpoch(uint256 indexed epoch);
 
   /// @notice Yield source structure.

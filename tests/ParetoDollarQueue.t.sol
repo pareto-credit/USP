@@ -311,8 +311,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _mintUSP(address(this), USDC, amount);
 
     vm.startPrank(address(this));
-    vm.expectEmit(true, true, true,true);
-    emit IParetoDollarQueue.WithdrawRequested(address(this), scaledAmount / 2, epochNumber);
     // redeem requests should be done via ParetoDollar
     par.requestRedeem(scaledAmount / 2);
 
@@ -495,6 +493,41 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(queue.epochPending(epoch), 0, 'Epoch pending should be 0');
   }
 
+  function testRedeemRoundingIssues() external {
+    uint256 amount = 100e6;
+    // mint USP
+    uint256 minted = _mintUSP(address(this), USDC, amount);
+    // manager deposits collateral in CV
+    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount);
+    uint256 epoch = queue.epochNumber();
+    // request USP redeem from address(this)
+    _requestRedeemUSP(address(this), minted);
+    // manager stops queue epoch so redeems can be processed
+    _stopEpoch();
+    // manager request redeems for half of the requested amount and then claim from CV after an epoch
+    _getFundsFromCV(FAS_USDC_CV, trancheAmount, epoch);
+    // we scale the value back to 6 decimals for correct comparison. There is 1 wei difference (scaled)
+    assertApproxEqAbs(queue.epochPending(epoch), 0, 1e12, 'Epoch pending should be almost 0');
+
+    // cannot call stopEpoch again as long as epochPending is > 0
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.NotReady.selector));
+    _stopEpoch();
+
+    // manager should send some funds to the contract (or use new deposits)
+    // to 'reset' epochPending.
+    // let's deposit funds with another user
+    _mintUSP(address(987), USDC, amount);
+    // the -1 is to 'fix' the 1 wei on epochPending
+    _depositFundsCV(FAS_USDC_CV, amount - 1);
+
+    // same can be achieved via donation + depositFunds(0)
+    // _donate(USDC, address(queue), 1);
+    // _depositFundsCV(FAS_USDC_CV, 0);
+
+    // now we can call stopEpoch
+    _stopEpoch();
+  }
+
   function testClaimRedeemRequest() external {
     // allow anyone to use ParetoDollar
     vm.prank(par.owner());
@@ -538,8 +571,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
     // claim the funds previously requested from CV
     uint256 balPre = IERC20Metadata(USDC).balanceOf(address(this));
-    vm.expectEmit(true, true, true,true);
-    emit IParetoDollarQueue.WithdrawRequestClaimed(address(this), minted, epoch);
     uint256 redeemed = par.claimRedeemRequest(epoch);
     assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(address(this)) - balPre, amount, 1, 'user should have the amount redeemed');
     assertEq(queue.userWithdrawalsEpochs(address(this), epoch), 0, 'user withdrawal epoch should be 0');
@@ -595,41 +626,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     // manager deposits only the amount that is not pending, epoch pending will be reset
     _depositFundsCV(FAS_USDC_CV, amount);
     assertEq(queue.epochPending(epoch), 0, 'Epoch pending should be set to 0');
-  }
-
-  function testRedeemRoundingIssues() external {
-    uint256 amount = 100e6;
-    // mint USP
-    uint256 minted = _mintUSP(address(this), USDC, amount);
-    // manager deposits collateral in CV
-    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount);
-    uint256 epoch = queue.epochNumber();
-    // request USP redeem from address(this)
-    _requestRedeemUSP(address(this), minted);
-    // manager stops queue epoch so redeems can be processed
-    _stopEpoch();
-    // manager request redeems for half of the requested amount and then claim from CV after an epoch
-    _getFundsFromCV(FAS_USDC_CV, trancheAmount, epoch);
-    // we scale the value back to 6 decimals for correct comparison. There is 1 wei difference (scaled)
-    assertApproxEqAbs(queue.epochPending(epoch), 0, 1e12, 'Epoch pending should be almost 0');
-
-    // cannot call stopEpoch again as long as epochPending is > 0
-    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.NotReady.selector));
-    _stopEpoch();
-
-    // manager should send some funds to the contract (or use new deposits)
-    // to 'reset' epochPending.
-    // let's deposit funds with another user
-    _mintUSP(address(987), USDC, amount);
-    // the -1 is to 'fix' the 1 wei on epochPending
-    _depositFundsCV(FAS_USDC_CV, amount - 1);
-
-    // same can be achieved via donation + depositFunds(0)
-    // _donate(USDC, address(queue), 1);
-    // _depositFundsCV(FAS_USDC_CV, 0);
-
-    // now we can call stopEpoch
-    _stopEpoch();
   }
 
   function _mintUSP(address _user, address _collateral, uint256 _amount) internal returns (uint256 mintedAmount) {
