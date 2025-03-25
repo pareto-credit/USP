@@ -30,7 +30,7 @@ contract TestParetoDollarStaking is Test, DeployScript {
     vm.createSelectFork("mainnet", 21836743);
 
     vm.startPrank(DEPLOYER);
-    (par, sPar) = _deploy(false);
+    (par, sPar,) = _deploy(false);
     vm.stopPrank();
 
     skip(100);

@@ -272,7 +272,7 @@ contract TestParetoDollar is Test, DeployScript {
     vm.expectRevert(abi.encodeWithSelector(IParetoDollar.NotAllowed.selector));
     par.requestRedeem(1);
     vm.expectRevert(abi.encodeWithSelector(IParetoDollar.NotAllowed.selector));
-    par.claimRedeemRequest(0);
+    par.claimRedeemRequest(1);
 
     vm.clearMockedCalls();
 
@@ -288,7 +288,7 @@ contract TestParetoDollar is Test, DeployScript {
 
     par.requestRedeem(100);
     vm.expectRevert(IParetoDollarQueue.NotReady.selector);
-    par.claimRedeemRequest(0);
+    par.claimRedeemRequest(1);
 
     vm.clearMockedCalls();
   }
@@ -315,7 +315,27 @@ contract TestParetoDollar is Test, DeployScript {
     par.mint(USDC, 100);
     vm.clearMockedCalls();
 
+    // cannot mint with stale price
+    vm.mockCall(
+      address(USDC_FEED),
+      abi.encodeWithSelector(IPriceFeed.latestRoundData.selector),
+      abi.encode(uint80(1), int256(1e8), uint256(block.timestamp - 1), uint256(block.timestamp - (par.oracleValidityPeriod() + 1)), uint80(1))
+    );
+    vm.expectRevert(IParetoDollar.InvalidOraclePrice.selector);
+    par.mint(USDC, 100);
+    vm.clearMockedCalls();
+
+    // can mint with stale price only if oracleValidityPeriod is set to 0
+    vm.startPrank(par.owner());
+    par.setOracleValidityPeriod(0);
+    vm.stopPrank();
+    vm.mockCall(
+      address(USDC_FEED),
+      abi.encodeWithSelector(IPriceFeed.latestRoundData.selector),
+      abi.encode(uint80(1), int256(1e8), uint256(block.timestamp - 1), uint256(block.timestamp - 25 hours), uint80(1))
+    );
     uint256 mintedAmount = par.mint(USDC, 1e6);
+    vm.clearMockedCalls();
 
     assertEq(IERC20Metadata(USDC).balanceOf(address(par)), 0, 'Par contract should not received collateral');
     assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), 1e6, 'Queue contract should received collateral');
@@ -338,12 +358,12 @@ contract TestParetoDollar is Test, DeployScript {
     uint256 uspAmount = 1000e18;
     // request redemption
     vm.expectEmit(true, true, true, true);
-    emit IParetoDollar.RedeemRequested(address(this), uspAmount);
+    emit IParetoDollar.RedeemRequested(address(this), queue.epochNumber(), uspAmount);
     par.requestRedeem(uspAmount);
 
     uint256 parBalPost = IERC20Metadata(address(par)).balanceOf(address(this));
     assertEq(parBalPost, 0, 'PAR balance should decrease by the redeemed amount');
-    assertEq(queue.userWithdrawalsEpochs(address(this), 0), uspAmount, 'Queue requestCollateral is called');
+    assertEq(queue.userWithdrawalsEpochs(address(this), 1), uspAmount, 'Queue requestCollateral is called');
   }
 
   function testClaimRequestRedeem() external {
@@ -363,7 +383,7 @@ contract TestParetoDollar is Test, DeployScript {
     // claim redeem request for epoch 0. We check simply that the inner queue method is 
     // called and we do this by checking that it reverts with NotReady error
     vm.expectRevert(IParetoDollarQueue.NotReady.selector);
-    par.claimRedeemRequest(0);
+    par.claimRedeemRequest(1);
 
     // mockCall for queue.claimRequestedCollateral this is used to check that the return amount of
     // claimReedemRequest is the same return value as queue.claimRedeemRequest
@@ -374,8 +394,18 @@ contract TestParetoDollar is Test, DeployScript {
     );
 
     vm.expectEmit(true, true, true, true);
-    emit IParetoDollar.Redeemed(address(this), uspAmount);
-    uint256 uspAmountRequested = par.claimRedeemRequest(0);
+    emit IParetoDollar.Redeemed(address(this), 1, uspAmount);
+    uint256 uspAmountRequested = par.claimRedeemRequest(1);
     assertEq(uspAmountRequested, uspAmount, 'Returned amount should be equal to requested USP amount');
+  }
+
+  function testSetOracleValidityPeriod() external {
+    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    par.setOracleValidityPeriod(1);
+
+    vm.startPrank(par.owner());
+    par.setOracleValidityPeriod(1);
+    assertEq(par.oracleValidityPeriod(), 1, 'oracle validity period should be updated');
+    vm.stopPrank();
   }
 }

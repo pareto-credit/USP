@@ -19,8 +19,8 @@ interface IParetoDollar {
   );
   event CollateralRemoved(address indexed token);
   event Minted(address indexed user, address indexed collateralToken, uint256 collateralAmount, uint256 uspminted);
-  event Redeemed(address indexed user, uint256 uspburned);
-  event RedeemRequested(address indexed user, uint256 uspburned);
+  event Redeemed(address indexed user, uint256 indexed epoch, uint256 uspBurned);
+  event RedeemRequested(address indexed user, uint256 indexed epoch, uint256 uspBurned);
 
   /// @notice Information about each allowed collateral token.
   struct CollateralInfo {

@@ -44,6 +44,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   uint256 public keyringPolicyId;
   /// @notice Address of the queue contract for redemptions and deployments.
   ParetoDollarQueue public queue;
+  /// @notice oracle validity period (in seconds)
+  uint256 public oracleValidityPeriod;
 
   //////////////////////////
   /// Initialize methods ///
@@ -68,6 +70,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     __EmergencyUtils_init(msg.sender, _admin, _pauser);
 
     queue = ParetoDollarQueue(_queue);
+    oracleValidityPeriod = 24 hours;
   }
 
   ////////////////////////
@@ -111,7 +114,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     _burn(msg.sender, _uspAmount);
     // make the request for redemption
     queue.requestRedeem(msg.sender, _uspAmount);
-    emit RedeemRequested(msg.sender, _uspAmount);
+    emit RedeemRequested(msg.sender, queue.epochNumber(), _uspAmount);
   }
 
   /// @notice Claim collateral tokens.
@@ -121,7 +124,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     _checkAllowed(msg.sender);
     // claim the request for collateral
     amountRequested = queue.claimRedeemRequest(msg.sender, epoch);
-    emit Redeemed(msg.sender, amountRequested);
+    emit Redeemed(msg.sender, epoch, amountRequested);
   }
 
   //////////////////////
@@ -186,7 +189,10 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// @return price The normalized price (18 decimals).
   function _getScaledOracleAnswer(address oracle, uint8 feedDecimals) internal view returns (uint256) {
     (,int256 answer,,uint256 updatedAt,) = IPriceFeed(oracle).latestRoundData();
-    if (updatedAt >= block.timestamp - 6 hours && answer > 0) {
+    uint256 _oracleValidity = oracleValidityPeriod;
+    // if validity period is 0, it means that we accept any price > 0
+    // othwerwise, we check if the price is updated within the validity period
+    if (answer > 0 && (_oracleValidity == 0 || (updatedAt >= block.timestamp - _oracleValidity))) {
       return uint256(answer) * 10 ** (18 - feedDecimals);
     }
     return 0;
@@ -243,6 +249,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   }
 
   /// @notice Remove collateral
+  /// @dev Collateral should be removed only if there are no yield sources using it anymore
+  /// and all redeem requests for that collateral have been fulfilled.
   /// @param token The collateral token address to remove.
   function removeCollateral(address token) external {
     _checkOwner();
@@ -276,5 +284,13 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
 
     keyring = _keyring;
     keyringPolicyId = _keyringPolicyId;
+  }
+
+  /// @notice Set the oracle validity period.
+  /// @param _oracleValidityPeriod The new oracle validity period (in seconds).
+  function setOracleValidityPeriod(uint256 _oracleValidityPeriod) external {
+    _checkOwner();
+
+    oracleValidityPeriod = _oracleValidityPeriod;
   }
 }

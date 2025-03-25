@@ -22,4 +22,20 @@ contract Constants {
   uint8 public constant USDT_FEED_DECIMALS = 8;
   address public constant USDT_FALLBACK_FEED = address(0);
   uint8 public constant USDT_FALLBACK_FEED_DECIMALS = 0;
+  // Fas USDT credit vault
+  address public constant FAS_USDC_CV = 0xf6223C567F21E33e859ED7A045773526E9E3c2D5;
+  address public constant AA_FAS_USDC_CV = 0x45054c6753b4Bce40C5d54418DabC20b070F85bE;
+  // sUSDS
+  address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
+  address public constant SUSDS = 0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD;
+  address public constant USDS_USDC_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
+  // Credit vaults methods sig
+  // bytes4(keccak256(bytes("depositAA(uint256)")))
+  bytes4 public constant DEPOSIT_AA_SIG = 0xb450dfce;
+  // bytes4(keccak256(bytes("requestWithdraw(uint256,address)")))
+  bytes4 public constant WITHDRAW_AA_SIG = 0xccc143b8;
+  // bytes4(keccak256(bytes("claimWithdrawRequest()")))
+  bytes4 public constant CLAIM_REQ_SIG = 0x33986ffa;
+  // bytes4(keccak256(bytes("claimInstantWithdrawRequest()")))
+  bytes4 public constant CLAIM_INSTANT_REQ_SIG = 0x991052b7;
 }
