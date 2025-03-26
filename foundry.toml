@@ -9,9 +9,10 @@
   gas_reports = ["*"]
   optimizer = true
   optimizer_runs = 10_000
+  viaIR = true
   out = "out"
   script = "script"
-  solc = "0.8.28"
+  solc = "0.8.29"
   src = "src"
   test = "tests"
   ffi = true
@@ -21,6 +22,7 @@
 
 [profile.lite]
   optimizer = false
+  viaIR = false
 
 [profile.ci]
   fuzz = { runs = 10_000 }

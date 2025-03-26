@@ -59,7 +59,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(queue.epochNumber(), 1, 'epoch number should be 0');
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
-    assertEq(source.token, USDC, 'token is wrong');
+    assertEq(address(source.token), USDC, 'token is wrong');
     assertEq(source.vaultToken, AA_FAS_USDC_CV, 'vault token is wrong');
     assertEq(source.maxCap, 100_000_000 * 1e6, 'vault max cap is wrong');
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
@@ -183,7 +183,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
     queue.addYieldSource(address(cdo), cdo.token(), cdo.AATranche(), 10, allowedMethods);
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(address(cdo));
-    assertEq(source.token, USDC, 'vault token is wrong');
+    assertEq(address(source.token), USDC, 'vault token is wrong');
     assertEq(source.maxCap, 10, 'vault max cap is wrong');
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultToken, cdo.AATranche(), 'vault token is wrong');
@@ -207,7 +207,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
   
     queue.removeYieldSource(FAS_USDC_CV);
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
-    assertEq(source.token, address(0), 'vault token should be removed');
+    assertEq(address(source.token), address(0), 'vault token should be removed');
     assertEq(source.maxCap, 0, 'vault max cap should be removed');
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultToken, address(0), 'vault token is wrong');
@@ -482,6 +482,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _stopEpoch();
     // manager request redeems for half of the requested amount and then claim from CV after an epoch
     _getFundsFromCV(FAS_USDC_CV, trancheAmount / 4, epoch);
+    assertApproxEqAbs(queue.getYieldSource(FAS_USDC_CV).depositedAmount, amount + amount / 2, 1, 'Vault deposited amount should be updated');
     // we scale the value back to 6 decimals for correct comparison
     assertApproxEqAbs(queue.epochPending(epoch), minted / 2, 1e12, 'Epoch pending should be halved');
 

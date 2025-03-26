@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
 interface IParetoDollarQueue {
     //////////////
@@ -24,7 +25,7 @@ interface IParetoDollarQueue {
 
   /// @notice Yield source structure.
   struct YieldSource {
-    address token;  // underlying token used by the vault
+    IERC20Metadata token;  // underlying token used by the vault
     address vaultToken; // token used by the vault
     uint256 maxCap; // maximum amount that can be deposited in the vault (interest is not included)
     uint256 depositedAmount; // amount deposited in the vault (interest is not included)

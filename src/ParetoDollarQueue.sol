@@ -156,6 +156,26 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     return false;
   }
 
+  /// @notice Call a method on a target address.
+  /// @param _target The target address.
+  /// @param _method The method to call.
+  /// @param _args The arguments to pass to the method.
+  /// @return The return data from the call.
+  function _externalCall(address _target, bytes4 _method, bytes memory _args) internal returns (bytes memory) {
+    (bool success, bytes memory returnData) = _target.call(abi.encodePacked(_method, _args));
+    require(success, _getRevertMsg(returnData));
+    return returnData;
+  }
+
+  /// @notice check if _method is in _allowedMethods array
+  /// @param _method The method to check.
+  /// @param _allowedMethods The list of allowed methods.
+  function _checkMethod(bytes4 _method, bytes4[] memory _allowedMethods) internal pure {
+    if (!_isMethodAllowed(_allowedMethods, _method)) {
+      revert NotAllowed();
+    }
+  }
+
   ///////////////////////////
   /// Protected functions ///
   ///////////////////////////
@@ -254,34 +274,41 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     // revert if the caller is not the manager
     _checkRole(MANAGER_ROLE);
 
-    if (_epoch > epochNumber) {
+    uint256 vaultsLen = _sources.length;
+    // check if the vaults and methods are the same length, 
+    // check also if arguments have the same length and if epoch is valid
+    if (vaultsLen == 0 || vaultsLen != _methods.length || vaultsLen != _args.length || _epoch > epochNumber) {
       revert Invalid();
     }
-
-    address[] memory _collaterals = par.getCollaterals();
-    uint256 _collateralsLen = _collaterals.length;
-    uint256[] memory _collateralBalBefore = new uint256[](_collateralsLen);
-    // loop through the collaterals and get the balance before the call
-    for (uint256 i = 0; i < _collateralsLen; i++) {
-      _collateralBalBefore[i] = IERC20(_collaterals[i]).balanceOf(address(this));
-    }
-
-    // call the whitelisted methods on the yield sources
-    callWhitelistedMethods(_sources, _methods, _args);
-
-    uint256 totRedeemedScaled;
-    IERC20Metadata _collateral;
-    uint256[] memory _collateralGain = new uint256[](_collateralsLen);
+  
+    YieldSource memory _yieldSource;
+    uint256 balPre;
+    uint256 redeemed;
     uint256 _epochPending = epochPending[_epoch];
-    // loop through the collaterals and get the balance after the call
-    for (uint256 i = 0; i < _collateralsLen; i++) {
-      _collateral = IERC20Metadata(_collaterals[i]);
-      _collateralGain[i] = _collateral.balanceOf(address(this)) - _collateralBalBefore[i];
-      if (_collateralGain[i] > 0) {
+    uint256 totRedeemedScaled;
+    address source;
+    bytes4 method;
+
+    // loop through the vaults and redeem funds
+    for (uint256 i = 0; i < vaultsLen; i++) {
+      method = _methods[i];
+      source = _sources[i];
+      _yieldSource = yieldSources[source];
+      // revert if method is not allowed (will also revert if yield source is not defined)
+      _checkMethod(method, _yieldSource.allowedMethods);
+      // redeem funds into the yield source
+      balPre = _yieldSource.token.balanceOf(address(this));
+      // do call on the yield source
+      _externalCall(source, method, _args[i]);
+      // calculate redeemed amount
+      redeemed = _yieldSource.token.balanceOf(address(this)) - balPre;
+      // update the depositedAmount in storage
+      yieldSources[source].depositedAmount -= redeemed > _yieldSource.depositedAmount ? _yieldSource.depositedAmount : redeemed;
+      if (redeemed > 0) {
         if (_epochPending > 0) {
-          totRedeemedScaled += _collateralGain[i] * (10 ** (18 - _collateral.decimals()));
+          totRedeemedScaled += redeemed * (10 ** (18 - _yieldSource.token.decimals()));
         }
-        emit YieldSourceRedeem(_sources[i], _collaterals[i], _collateralGain[i]);
+        emit YieldSourceRedeem(source, address(_yieldSource.token), redeemed);
       }
     }
 
@@ -315,18 +342,6 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     emit NewEpoch(_currEpoch + 1);
   }
 
-  // TODO
-
-  // function depositYield() external {
-  //   // revert if the caller is not the manager
-  //   _checkRole(MANAGER_ROLE);
-
-  //   // TODO supply is burned on redeem requests in ParetoDollar
-  //   uint256 _uspSupply = par.totalSupply();
-  //   // check value of vaultTokens
-  //   // mint the difference??
-  // }
-
   /// @notice Deposit funds into yield sources.
   /// @dev only the manager can call this function. NOTE: for Pareto Credit Vaults
   /// the deposit must be done during the buffer period without using the queue otherwise
@@ -353,28 +368,20 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     }
   
     YieldSource memory _yieldSource;
-    bytes memory returnData;
-    bytes4 selector;
-    bool success;
     uint256 balPre;
     uint256 deposited;
-    IERC20Metadata _token;
     // loop through the vaults and deposit funds
     for (uint256 i = 0; i < _vaultsLen; i++) {
       _yieldSource = yieldSources[_sources[i]];
       // revert if method is not allowed (will also revert if yield source is not defined)
-      selector = _methods[i];
-      if (!_isMethodAllowed(_yieldSource.allowedMethods, selector)) {
-        revert NotAllowed();
-      }
-      _token = IERC20Metadata(_yieldSource.token);
+      _checkMethod(_methods[i], _yieldSource.allowedMethods);
+
       // deposit funds into the yield source
-      balPre = _token.balanceOf(address(this));
-      (success, returnData) = _sources[i].call(abi.encodePacked(selector, _args[i]));
-      require(success, _getRevertMsg(returnData));
+      balPre = _yieldSource.token.balanceOf(address(this));
+      _externalCall(_sources[i], _methods[i], _args[i]);
 
       // calculate deposited amount
-      deposited = balPre - _token.balanceOf(address(this));
+      deposited = balPre - _yieldSource.token.balanceOf(address(this));
       _yieldSource.depositedAmount += deposited;
       // revert if the amount is greater than the max cap
       if (_yieldSource.depositedAmount > _yieldSource.maxCap) {
@@ -383,7 +390,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
       // save the depositedAmount in storage
       yieldSources[_sources[i]].depositedAmount = _yieldSource.depositedAmount;
 
-      emit YieldSourceDeposit(_sources[i], _yieldSource.token, deposited);
+      emit YieldSourceDeposit(_sources[i], address(_yieldSource.token), deposited);
     }
 
     // check if collaterals balances (scaled to 18 decimals) are greater than the totReservedWithdrawals
@@ -415,17 +422,12 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
       revert Invalid();
     }
 
-    bool success;
-    bytes memory returnData;
     // loop through the sources and call the methods
     for (uint256 i = 0; i < _sourcesLen; i++) {
       // revert if the method is not allowed
-      if (!_isMethodAllowed(yieldSources[_sources[i]].allowedMethods, _methods[i])) {
-        revert NotAllowed();
-      }
+      _checkMethod(_methods[i], yieldSources[_sources[i]].allowedMethods);
       // call the method on the yield source
-      (success, returnData) = _sources[i].call(abi.encodePacked(_methods[i], _args[i]));
-      require(success, _getRevertMsg(returnData));
+      _externalCall(_sources[i], _methods[i], _args[i]);
 
       emit YieldSourceCall(_sources[i], _methods[i], _args[i]);
     }
@@ -447,11 +449,14 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   ) external {
     _checkOwner();
     // revert if the token is already in the yield sources
-    if (yieldSources[_source].token != address(0)) {
+    if (address(yieldSources[_source].token) != address(0)) {
       revert YieldSourceInvalid();
     }
+    if (_source == address(0) || _token == address(0) || _vaultToken == address(0) || allowedMethods.length == 0) {
+      revert Invalid();
+    }
     // add the token to the yield sources
-    yieldSources[_source] = YieldSource(_token, _vaultToken, _maxCap, 0, allowedMethods);
+    yieldSources[_source] = YieldSource(IERC20Metadata(_token), _vaultToken, _maxCap, 0, allowedMethods);
     // approve the token for the yield source
     IERC20Metadata(_token).safeIncreaseAllowance(_source, type(uint256).max);
   }
@@ -463,10 +468,10 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   function removeYieldSource(address _source) external {
     _checkOwner();
     // revert if the token is not in the yield sources
-    if (yieldSources[_source].token == address(0)) {
+    if (address(yieldSources[_source].token) == address(0)) {
       revert YieldSourceInvalid();
     }
-    IERC20Metadata _token = IERC20Metadata(yieldSources[_source].token);
+    IERC20Metadata _token = yieldSources[_source].token;
     // remove allowance for the yield source
     _token.safeDecreaseAllowance(_source, _token.allowance(address(this), _source));
     // remove the yield source
