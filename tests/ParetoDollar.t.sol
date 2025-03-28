@@ -408,4 +408,14 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(par.oracleValidityPeriod(), 1, 'oracle validity period should be updated');
     vm.stopPrank();
   }
+
+  function testMintForQueue() external {
+    vm.expectRevert(IParetoDollar.NotAllowed.selector);
+    par.mintForQueue(1234);
+
+    vm.startPrank(address(queue));
+    par.mintForQueue(1234);
+    assertEq(IERC20Metadata(address(par)).balanceOf(address(queue)), 1234, 'Queue should have 1234 USP');
+    vm.stopPrank();
+  }
 }

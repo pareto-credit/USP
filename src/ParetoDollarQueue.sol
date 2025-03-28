@@ -3,10 +3,24 @@ pragma solidity ^0.8.20;
 
 // OpenZeppelin upgradeable imports.
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "./interfaces/IParetoDollar.sol";
+import "./interfaces/IParetoDollarStaking.sol";
 import "./interfaces/IParetoDollarQueue.sol";
+import "./interfaces/IIdleCDOEpochVariant.sol";
 import "./EmergencyUtils.sol";
+
+/* 
+
+██████╗  █████╗ ██████╗ ███████╗████████╗ ██████╗      ██████╗ ██╗   ██╗███████╗██╗   ██╗███████╗
+██╔══██╗██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗    ██╔═══██╗██║   ██║██╔════╝██║   ██║██╔════╝
+██████╔╝███████║██████╔╝█████╗     ██║   ██║   ██║    ██║   ██║██║   ██║█████╗  ██║   ██║█████╗  
+██╔═══╝ ██╔══██║██╔══██╗██╔══╝     ██║   ██║   ██║    ██║▄▄ ██║██║   ██║██╔══╝  ██║   ██║██╔══╝  
+██║     ██║  ██║██║  ██║███████╗   ██║   ╚██████╔╝    ╚██████╔╝╚██████╔╝███████╗╚██████╔╝███████╗
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝    ╚═════╝      ╚══▀▀═╝  ╚═════╝ ╚══════╝ ╚═════╝ ╚══════╝
+
+*/
 
 /// @title ParetoDollarQueue - Contract to queue redemptions for ParetoDollar
 contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, EmergencyUtils {
@@ -33,8 +47,12 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
   /// @notice ParetoDollar contract.
   IParetoDollar public par;
+  /// @notice ParetoDollarStaking contract.
+  IParetoDollarStaking public sPar;
   /// @notice mapping of yield sources by address.
   mapping(address => YieldSource) public yieldSources;
+  /// @notice list of all yieldSources
+  YieldSource[] public allYieldSources;
   /// @notice mapping of withdraw requests per user per epoch
   mapping(address => mapping (uint256 => uint256)) public userWithdrawalsEpochs;
   /// @notice mapping of pending withdrawals (ParetoDollars) per epoch 
@@ -57,16 +75,19 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @param _admin The admin address.
   /// @param _pauser The pauser address.
   /// @param _par The address of the ParetoDollar contract.
+  /// @param _sPar The address of the ParetoDollarStaking contract.
   /// @param _managers The addresses of the managers.
   function initialize(
     address _admin,
     address _pauser,
     address _par,
+    address _sPar,
     address[] memory _managers
   ) public initializer {
     __ReentrancyGuard_init();
     __EmergencyUtils_init(msg.sender, _admin, _pauser);
     par = IParetoDollar(_par);
+    sPar = IParetoDollarStaking(_sPar);
 
     // manage roles
     for (uint256 i = 0; i < _managers.length; i++) {
@@ -75,15 +96,30 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
     // set epoch number to 1
     epochNumber = 1;
+    // add allowance for ParetoDollar to ParetoDollarStaking
+    IERC20Metadata(_par).safeIncreaseAllowance(_sPar, type(uint256).max);
   }
 
   //////////////////////
   /// View functions ///
   //////////////////////
 
+  /// @notice Get the yield source for a given address.
+  /// @param _source The address of the yield source.
+  /// @return The yield source.
+  function getYieldSource(address _source) external view returns (YieldSource memory) {
+    return yieldSources[_source];
+  }
+
+  /// @notice Get the list of all yield sources.
+  /// @return The list of all yield sources.
+  function getAllYieldSources() external view returns (YieldSource[] memory) {
+    return allYieldSources;
+  }
+
   /// @notice Get the total amount of collaterals available scaled to 18 decimals
   /// @return totCollateralBal The total amount of collaterals (18 decimals).
-  function getTotCollateralBalanceScaled() public view returns (uint256 totCollateralBal) {
+  function getUnlentBalanceScaled() public view returns (uint256 totCollateralBal) {
     address[] memory allCollaterals = par.getCollaterals();
     uint256 collateralsLen = allCollaterals.length;
     IERC20Metadata _collateral;
@@ -95,11 +131,53 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     }
   }
 
-  /// @notice Get the yield source for a given address.
-  /// @param _source The address of the yield source.
-  /// @return The yield source.
-  function getYieldSource(address _source) external view returns (YieldSource memory) {
-    return yieldSources[_source];
+  /// @notice Get the total value of collaterals
+  /// @return totCollaterals The total amount of collaterals scaled to 18 decimals.
+  function getTotalCollateralsScaled() public view returns (uint256 totCollaterals) {
+    // Get total amount of unlent balances in this contract
+    address[] memory allCollaterals = par.getCollaterals();
+    uint256 collateralsLen = allCollaterals.length;
+    IERC20Metadata _collateral;
+    // loop through all collaterals
+    for (uint256 i = 0; i < collateralsLen; i++) {
+      _collateral = IERC20Metadata(allCollaterals[i]);
+      // get the balance of the collateral and scale it to 18 decimals
+      totCollaterals += _collateral.balanceOf(address(this)) * (10 ** (18 - _collateral.decimals()));
+    }
+
+    uint256 sourcesLen = allYieldSources.length;
+    YieldSource memory src;
+    // loop through all yield sources
+    for (uint256 i = 0; i < sourcesLen; i++) {
+      src = allYieldSources[i];
+      if (src.vaultType == 1) {
+        // Pareto Credit Vault
+        totCollaterals += scaledNAVCreditVault(src.source, src.vaultToken, src.token);
+      } else if (src.vaultType == 2) {
+        // ERC4626 vault
+        totCollaterals += scaledNAVERC4626(IERC4626(src.vaultToken));
+      }
+      // if vaultType is not one supported we skip it and add 0 to totCollaterals
+    }
+  }
+
+  /// @notice Get the total value in this contract (scaled to 18 decimals) of a Pareto Credit Vault.
+  /// @param yieldSource The address of the Pareto Credit Vault.
+  /// @param vaultToken The address of the vault token (Tranche token).
+  /// @param token The address of the underlying token.
+  /// @return The total value of the Pareto Credit Vault in this contract.
+  function scaledNAVCreditVault(address yieldSource, address vaultToken, IERC20Metadata token) public view returns (uint256) {
+    IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
+    // tranche balance in this contract (which have 18 decimals) * price / 10 ** underlying decimals)
+    return IERC20Metadata(vaultToken).balanceOf(address(this)) * cv.virtualPrice(cv.AATranche()) / 10 ** (token.decimals());
+  }
+
+  /// @notice Get the total value in this contract (scaled to 18 decimals) of an ERC4626 vault.
+  /// @param vault The address of the ERC4626 vault token.
+  /// @return The total value of the ERC4626 vault in this contract.
+  function scaledNAVERC4626(IERC4626 vault) public view returns (uint256) {
+    // ERC4626 vault
+    return vault.convertToAssets(vault.balanceOf(address(this))) / 10 ** (vault.decimals());
   }
 
   //////////////////////////
@@ -342,6 +420,27 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     emit NewEpoch(_currEpoch + 1);
   }
 
+  /// @notice Deposit yield from vaults to ParetoDollarStaking
+  /// @dev The function mints ParetoDollar and deposits them into ParetoDollarStaking.
+  function depositYield() external {
+    // revert if the caller is not the manager
+    _checkRole(MANAGER_ROLE);
+
+    // We first fetch total ParetoDollar supply and add the total amount of reserved withdrawals
+    // which are ParetoDollars already burned but not yet claimed
+    uint256 parSupply = IERC20Metadata(address(par)).totalSupply() + totReservedWithdrawals;
+    // we calculate the total amount of collaterals available scaled to 18 decimals
+    uint256 totCollaterals = getTotalCollateralsScaled();
+    // calculate the gain
+    uint256 gain = totCollaterals > parSupply ? totCollaterals - parSupply : 0;
+    if (gain > 0) {
+      // mint ParetoDollar to this contract equal to the gain
+      par.mintForQueue(gain);
+      // deposit ParetoDollar into the staking contract
+      sPar.depositRewards(gain);
+    }
+  }
+
   /// @notice Deposit funds into yield sources.
   /// @dev only the manager can call this function. NOTE: for Pareto Credit Vaults
   /// the deposit must be done during the buffer period without using the queue otherwise
@@ -394,7 +493,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     }
 
     // check if collaterals balances (scaled to 18 decimals) are greater than the totReservedWithdrawals
-    if (getTotCollateralBalanceScaled() < totReservedWithdrawals) {
+    if (getUnlentBalanceScaled() < totReservedWithdrawals) {
       revert InsufficientBalance();
     }
 
@@ -439,26 +538,33 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @param _token The address of the token used by the yield source.
   /// @param _vaultToken The address of the token used by the vault.
   /// @param _maxCap The maximum amount that can be deposited in the vault.
-  /// @param allowedMethods The list of allowed methods to call on the yield source.
+  /// @param _allowedMethods The list of allowed methods to call on the yield source.
+  /// @param _vaultType The type of the vault (1 = Pareto Credit Vault, 2 = ERC4626).
   function addYieldSource(
     address _source, 
     address _token, 
     address _vaultToken, 
     uint256 _maxCap, 
-    bytes4[] calldata allowedMethods
+    bytes4[] calldata _allowedMethods,
+    uint8 _vaultType
   ) external {
     _checkOwner();
     // revert if the token is already in the yield sources
     if (address(yieldSources[_source].token) != address(0)) {
       revert YieldSourceInvalid();
     }
-    if (_source == address(0) || _token == address(0) || _vaultToken == address(0) || allowedMethods.length == 0) {
+    if (_source == address(0) || _token == address(0) || _vaultToken == address(0) || _allowedMethods.length == 0) {
       revert Invalid();
     }
-    // add the token to the yield sources
-    yieldSources[_source] = YieldSource(IERC20Metadata(_token), _vaultToken, _maxCap, 0, allowedMethods);
+    YieldSource memory _yieldSource = YieldSource(IERC20Metadata(_token), _source, _vaultToken, _maxCap, 0, _allowedMethods, _vaultType);
+    // add the token to the yield sources mapping
+    yieldSources[_source] = _yieldSource;
+    // add the token to the yield sources list
+    allYieldSources.push(_yieldSource);
     // approve the token for the yield source
     IERC20Metadata(_token).safeIncreaseAllowance(_source, type(uint256).max);
+
+    emit YieldSourceAdded(_source, _token);
   }
 
   /// @notice Remove yield source.
@@ -467,14 +573,27 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @param _source The address of the yield source.
   function removeYieldSource(address _source) external {
     _checkOwner();
+
+    IERC20Metadata _token = yieldSources[_source].token;
     // revert if the token is not in the yield sources
-    if (address(yieldSources[_source].token) == address(0)) {
+    if (address(_token) == address(0)) {
       revert YieldSourceInvalid();
     }
-    IERC20Metadata _token = yieldSources[_source].token;
     // remove allowance for the yield source
     _token.safeDecreaseAllowance(_source, _token.allowance(address(this), _source));
-    // remove the yield source
+    // remove the yield source from mapping
     delete yieldSources[_source];
+    // remove the source from the list of all yield sources
+    // order is not preserved but it's not important (last el can be reallocated)
+    YieldSource[] memory _sources = allYieldSources;
+    uint256 sourcesLen = _sources.length;
+    for (uint256 i = 0; i < sourcesLen; i++) {
+      if (address(_sources[i].token) == address(_token)) {
+        allYieldSources[i] = _sources[sourcesLen - 1];
+        allYieldSources.pop();
+        break;
+      }
+    }
+    emit YieldSourceRemoved(_source);
   }
 }

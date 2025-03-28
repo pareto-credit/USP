@@ -39,4 +39,5 @@ interface IParetoDollar {
   function requestRedeem(uint256 uspAmount) external;
   function claimRedeemRequest(uint256 epoch) external returns(uint256);
   function isWalletAllowed(address _user) external view returns (bool);
+  function mintForQueue(uint256 amount) external;
 }

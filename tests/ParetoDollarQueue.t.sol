@@ -50,6 +50,8 @@ contract TestParetoDollarQueue is Test, DeployScript {
   function testInitialize() external view {
     assertEq(queue.owner(), TL_MULTISIG, 'owner is wrong');
     assertEq(address(queue.par()), address(par), 'ParetoDollar address is wrong');
+    assertEq(address(queue.sPar()), address(sPar), 'ParetoDollarStaking address is wrong');
+    assertEq(IERC20Metadata(address(par)).allowance(address(queue), address(sPar)), type(uint256).max, 'allowance for staking contract is wrong');
 
     assertEq(queue.hasRole(queue.DEFAULT_ADMIN_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have DEFAULT_ADMIN_ROLE');
     assertEq(queue.hasRole(queue.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
@@ -57,6 +59,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(queue.hasRole(queue.MANAGER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have MANAGER_ROLE');
     assertEq(queue.isPausable(), true, 'the contract should be pausable');
     assertEq(queue.epochNumber(), 1, 'epoch number should be 0');
+    assertEq(queue.getAllYieldSources()[0].source, FAS_USDC_CV, 'yield source is wrong');
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
     assertEq(address(source.token), USDC, 'token is wrong');
@@ -168,12 +171,12 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
   function testAddYieldSource() external {
     vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
-    queue.addYieldSource(address(1), USDC, AA_FAS_USDC_CV, 0, new bytes4[](0));
+    queue.addYieldSource(address(1), USDC, AA_FAS_USDC_CV, 0, new bytes4[](0), 0);
 
     vm.startPrank(queue.owner());
     // revert for yield source already present
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.YieldSourceInvalid.selector));
-    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, 10, new bytes4[](0));
+    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, 10, new bytes4[](0), 0);
 
     IIdleCDOEpochVariant cdo = IIdleCDOEpochVariant(0xdd4D030A4337CE492B55bc5169F6A9568242C0Bc);
     bytes4[] memory allowedMethods = new bytes4[](4);
@@ -181,17 +184,24 @@ contract TestParetoDollarQueue is Test, DeployScript {
     allowedMethods[1] = WITHDRAW_AA_SIG;
     allowedMethods[2] = CLAIM_REQ_SIG;
     allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
-    queue.addYieldSource(address(cdo), cdo.token(), cdo.AATranche(), 10, allowedMethods);
+    vm.expectEmit(true, true, true, true);
+    emit IParetoDollarQueue.YieldSourceAdded(address(cdo), USDC);
+    queue.addYieldSource(address(cdo), cdo.token(), cdo.AATranche(), 10, allowedMethods, 1);
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(address(cdo));
     assertEq(address(source.token), USDC, 'vault token is wrong');
     assertEq(source.maxCap, 10, 'vault max cap is wrong');
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultToken, cdo.AATranche(), 'vault token is wrong');
+    assertEq(source.vaultType, 1, 'vault typer is wrong');
     assertEq(source.allowedMethods.length, 4, 'vault allowed methods is wrong');
     assertEq(source.allowedMethods[0], DEPOSIT_AA_SIG, 'first allowed method is wrong');
     assertEq(source.allowedMethods[1], WITHDRAW_AA_SIG, 'second allowed method is wrong');
     assertEq(source.allowedMethods[2], CLAIM_REQ_SIG, 'third allowed method is wrong');
     assertEq(source.allowedMethods[3], CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
+
+    // one source was added at deployment and another one in this test
+    assertEq(queue.getAllYieldSources().length, 2, 'there should be only two yield sources');
+    assertEq(queue.getAllYieldSources()[1].source, address(cdo), 'yield source is wrong');
     // check allowance
     assertEq(IERC20Metadata(USDC).allowance(address(queue), address(cdo)), type(uint256).max, 'allowance is wrong');
     vm.stopPrank();
@@ -205,31 +215,35 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.YieldSourceInvalid.selector));
     queue.removeYieldSource(address(1));
   
+    vm.expectEmit(true, true, true,true);
+    emit IParetoDollarQueue.YieldSourceRemoved(FAS_USDC_CV);
     queue.removeYieldSource(FAS_USDC_CV);
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
     assertEq(address(source.token), address(0), 'vault token should be removed');
     assertEq(source.maxCap, 0, 'vault max cap should be removed');
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultToken, address(0), 'vault token is wrong');
+    assertEq(source.vaultType, 0, 'vault type is wrong');
     assertEq(source.allowedMethods.length, 0, 'vault allowed methods should be removed');
+    assertEq(queue.getAllYieldSources().length, 0, 'there should be no yield sources');
     // check allowance
     assertEq(IERC20Metadata(USDC).allowance(address(queue), FAS_USDC_CV), 0, 'allowance should be removed');
     vm.stopPrank();
   }
 
-  function testGetTotCollateralBalanceScaled() external {
-    uint256 totCollateral = queue.getTotCollateralBalanceScaled();
+  function testGetUnlentBalanceScaled() external {
+    uint256 totCollateral = queue.getUnlentBalanceScaled();
     assertEq(totCollateral, 0, 'total collateral should be 0');
 
     // deposit via ParetoDollar
     _mintUSP(address(this), USDC, 1e6);
     // the result is scaled to 18 decimals
-    assertEq(queue.getTotCollateralBalanceScaled(), 1e18, 'total collateral should be updated after deposit');
+    assertEq(queue.getUnlentBalanceScaled(), 1e18, 'total collateral should be updated after deposit');
     // deposit via ParetoDollar
     // test with a different collateral
     _mintUSP(address(this), USDT, 2e6);
     // the result is scaled to 18 decimals
-    assertEq(queue.getTotCollateralBalanceScaled(), 3e18, 'total collateral should be updated after second deposit');
+    assertEq(queue.getUnlentBalanceScaled(), 3e18, 'total collateral should be updated after second deposit');
   }
 
   function testDepositFundsSingleVault() external {
@@ -627,6 +641,65 @@ contract TestParetoDollarQueue is Test, DeployScript {
     // manager deposits only the amount that is not pending, epoch pending will be reset
     _depositFundsCV(FAS_USDC_CV, amount);
     assertEq(queue.epochPending(epoch), 0, 'Epoch pending should be set to 0');
+  }
+
+  function testGetTotalCollateralsScaled() external {
+    assertEq(queue.getTotalCollateralsScaled(), 0, 'totCollaterals is 0 initially');
+    // deposit 100 USDC in the ParetoDollar
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount);
+    assertEq(queue.getTotalCollateralsScaled(), 100 * 1e18, 'totCollaterals is not considering unlent balance');
+    _depositFundsCV(FAS_USDC_CV, amount / 2);
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 100 * 1e18, 1, 'totCollaterals value after CV deposit is not correct');
+    _mintUSP(address(123), USDC, amount);
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1, 'totCollaterals value after second deposit is not correct');
+    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount / 2 + amount);
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 2, 'totCollaterals value after second CV deposit is not correct');
+    _getFundsFromCV(FAS_USDC_CV, trancheAmount, 1);
+    // diff is 1e12 (ie 1 wei of a token with 6 decimals scaled to 1e18)
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1e12, 'totCollaterals value after CV redeem is not correct');
+  }
+
+  function testDepositYield() external {
+    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
+    queue.depositYield();
+
+    // set sPar fees to 0 to ease calculations
+    vm.startPrank(sPar.owner());
+    sPar.updateFeeParams(0, address(1));
+    vm.stopPrank();
+
+    _depositYield();
+    assertEq(par.totalSupply(), 0, 'total supply should not change if there is no new collateral');
+
+    // deposit 100 USDC in the ParetoDollar
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount);
+    uint256 initialSupply = par.totalSupply();
+
+    _depositYield();
+    assertEq(par.totalSupply(), initialSupply, 'total supply should not change if there is no yield');
+
+    uint256 trancheTokens = _depositFundsCV(FAS_USDC_CV, amount);
+    assertEq(par.totalSupply(), initialSupply, 'total supply should not change after depositing in CV');
+
+    IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(FAS_USDC_CV);
+    uint256 pricePre = cv.virtualPrice(cv.AATranche());
+    // Increase CV price by donating assets to it
+    _donate(USDC, FAS_USDC_CV, amount * 100);
+    uint256 pricePost = cv.virtualPrice(cv.AATranche());
+    assertGt(pricePost, pricePre, 'CV price should increase after donation');
+    uint256 priceDiff = pricePost - pricePre;
+    uint256 gainScaled18 = trancheTokens * priceDiff / 1e6;
+
+    _depositYield();
+
+    assertApproxEqAbs(par.totalSupply(), initialSupply + gainScaled18, 1, 'total supply should increase by the yield gained');
+  }
+
+  function _depositYield() internal {
+    vm.prank(TL_MULTISIG);
+    queue.depositYield();
   }
 
   function _mintUSP(address _user, address _collateral, uint256 _amount) internal returns (uint256 mintedAmount) {

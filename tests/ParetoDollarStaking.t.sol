@@ -13,6 +13,7 @@ import { console2 } from "forge-std/console2.sol";
 
 import { ParetoDollar } from "../src/ParetoDollar.sol";
 import { ParetoDollarStaking } from "../src/ParetoDollarStaking.sol";
+import { ParetoDollarQueue } from "../src/ParetoDollarQueue.sol";
 import { IParetoDollar } from "../src/interfaces/IParetoDollar.sol";
 import { IPriceFeed } from "../src/interfaces/IPriceFeed.sol";
 import { IKeyring } from "../src/interfaces/IKeyring.sol";
@@ -23,6 +24,7 @@ contract TestParetoDollarStaking is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
   ParetoDollar par;
   ParetoDollarStaking sPar;
+  ParetoDollarQueue queue;
 
   event RewardsDeposited(uint256 amount);
 
@@ -30,7 +32,7 @@ contract TestParetoDollarStaking is Test, DeployScript {
     vm.createSelectFork("mainnet", 21836743);
 
     vm.startPrank(DEPLOYER);
-    (par, sPar,) = _deploy(false);
+    (par, sPar, queue) = _deploy(false);
     vm.stopPrank();
 
     skip(100);
@@ -228,7 +230,7 @@ contract TestParetoDollarStaking is Test, DeployScript {
 
     // deposit rewards cannot be called by non managers
     vm.startPrank(address(this));
-    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), sPar.MANAGER_ROLE()));
+    vm.expectRevert(abi.encodeWithSelector(ParetoDollarStaking.NotAllowed.selector));
     sPar.depositRewards(depositAmount);
     vm.stopPrank();
 
@@ -288,11 +290,11 @@ contract TestParetoDollarStaking is Test, DeployScript {
   }
 
   function depositRewards(uint256 _amount) internal {
-    give(address(par), address(sPar.owner()), _amount);
+    give(address(par), address(queue), _amount);
     uint256 expectedFees = _amount * sPar.fee() / sPar.FEE_100();
     uint256 expectedRewards = _amount - expectedFees;
 
-    vm.startPrank(sPar.owner());
+    vm.startPrank(address(queue));
     par.approve(address(sPar), _amount);
     vm.expectEmit(address(sPar));
     emit RewardsDeposited(expectedRewards);

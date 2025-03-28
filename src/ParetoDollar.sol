@@ -11,6 +11,17 @@ import "./interfaces/IParetoDollar.sol";
 import "./EmergencyUtils.sol";
 import "./ParetoDollarQueue.sol";
 
+/* 
+
+██████╗  █████╗ ██████╗ ███████╗████████╗ ██████╗     ██╗   ██╗███████╗██████╗ 
+██╔══██╗██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗    ██║   ██║██╔════╝██╔══██╗
+██████╔╝███████║██████╔╝█████╗     ██║   ██║   ██║    ██║   ██║███████╗██████╔╝
+██╔═══╝ ██╔══██║██╔══██╗██╔══╝     ██║   ██║   ██║    ██║   ██║╚════██║██╔═══╝ 
+██║     ██║  ██║██║  ██║███████╗   ██║   ╚██████╔╝    ╚██████╔╝███████║██║     
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝    ╚═════╝      ╚═════╝ ╚══════╝╚═╝     
+
+*/ 
+
 /// @title ParetoDollar - A synthetic dollar minted 1:1 against approved collateral tokens
 /// @notice Users can mint ParetoDollar (USP) by depositing supported collateral tokens and redeem USP for collateral tokens.
 /// Minting enforces a minimum collateral price threshold (0.99 USD normalized to 18 decimals) using primary and fallback oracles,
@@ -258,6 +269,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     if (token == address(0)) revert InvalidData();
     delete collateralInfo[token];
     // remove the token from the list of collaterals
+    // order is not preserved but it's not important (last el can be reallocated)
     address[] memory _collaterals = collaterals;
     uint256 collateralsLen = _collaterals.length;
     for (uint256 i = 0; i < collateralsLen; i++) {
@@ -268,6 +280,16 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
       }
     }
     emit CollateralRemoved(token);
+  }
+
+  /// @notice Mint ParetoDollar for the queue contract.
+  /// @param _amount The amount of USP to mint.
+  function mintForQueue(uint256 _amount) external {
+    if (msg.sender != address(queue)) {
+      revert NotAllowed();
+    }
+    // mint ParetoDollar to the queue
+    _mint(address(queue), _amount);
   }
 
   /// @notice Retrieve the list of collateral tokens.

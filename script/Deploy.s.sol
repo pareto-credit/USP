@@ -20,31 +20,29 @@ contract DeployScript is Script, Constants {
     ParetoDollarStaking sPar,
     ParetoDollarQueue queue
   ) {
-    // Precompute the address of the ParetoDollarQueue contract
-    // - first contract deployed is the ProxyAdmin
-    // - second contract is the ParetoDollar implementation
-    // - third contract is the ParetoDollar proxy
-    address queueAddr = vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 3);
-
     // Deploy ParetoDollar with transparent proxy
     // check https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades for more info
-    address proxy = Upgrades.deployTransparentProxy(
+    par = ParetoDollar(Upgrades.deployTransparentProxy(
       "ParetoDollar.sol",
       TL_MULTISIG, // INITIAL_OWNER_ADDRESS_FOR_PROXY_ADMIN,
       abi.encodeCall(
         ParetoDollar.initialize, (
           TL_MULTISIG,
           HYPERNATIVE_PAUSER,
-          queueAddr
+          // Precompute the address of the ParetoDollarQueue contract
+          // - first contract is the ParetoDollar implementation (nonce)
+          // - second contract is the ParetoDollar proxy (nonce + 1)
+          // - third contract is the ParetoDollarQueue implementation (nonce + 2)
+          // - fourth contract is the ParetoDollarQueue proxy (nonce + 3)
+          vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 3)
         )
       )
-    );
-    par = ParetoDollar(proxy);
+    ));
 
-    // Deploy ParetoDollarQueue with transparent proxy
     address[] memory managersQueue = new address[](1);
     managersQueue[0] = TL_MULTISIG;
-    address queueProxy = Upgrades.deployTransparentProxy(
+    // Deploy ParetoDollarQueue with transparent proxy
+    queue = ParetoDollarQueue(Upgrades.deployTransparentProxy(
       "ParetoDollarQueue.sol",
       TL_MULTISIG,
       abi.encodeCall(
@@ -52,11 +50,33 @@ contract DeployScript is Script, Constants {
           TL_MULTISIG,
           HYPERNATIVE_PAUSER,
           address(par),
+          // Precompute the address of the ParetoDollarStaking contract
+          // - first contract is the ParetoDollarQueue implementation (nonce)
+          // - second contract is the ParetoDollarQueue proxy (nonce + 1)
+          // - third contract is the ParetoDollarStaking implementation (nonce + 2)
+          // - fourth contract is the ParetoDollarStaking proxy (nonce + 3)
+          vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 3),
           managersQueue
         )
       )
-    );
-    queue = ParetoDollarQueue(queueProxy);
+    ));
+
+    // Deploy ParetoDollarStaking with transparent proxy
+    address[] memory managers = new address[](1);
+    managers[0] = TL_MULTISIG;
+    sPar = ParetoDollarStaking(Upgrades.deployTransparentProxy(
+      "ParetoDollarStaking.sol",
+      TL_MULTISIG,
+      abi.encodeCall(
+        ParetoDollarStaking.initialize, (
+          address(par),
+          TL_MULTISIG,
+          HYPERNATIVE_PAUSER,
+          managers,
+          address(queue)
+        )
+      )
+    ));
 
     // add fasanara yield source with 0 max cap (ie unlimited)
     bytes4[] memory allowedMethods = new bytes4[](4);
@@ -65,24 +85,7 @@ contract DeployScript is Script, Constants {
     allowedMethods[2] = CLAIM_REQ_SIG;
     allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
     uint256 maxCap = 100_000_000 * 1e6; // 100M USDC
-    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, maxCap, allowedMethods);
-
-    // Deploy ParetoDollarStaking with transparent proxy
-    address[] memory managers = new address[](1);
-    managers[0] = TL_MULTISIG;
-    address sProxy = Upgrades.deployTransparentProxy(
-      "ParetoDollarStaking.sol",
-      TL_MULTISIG,
-      abi.encodeCall(
-        ParetoDollarStaking.initialize, (
-          address(par),
-          TL_MULTISIG,
-          HYPERNATIVE_PAUSER,
-          managers
-        )
-      )
-    );
-    sPar = ParetoDollarStaking(sProxy);
+    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, maxCap, allowedMethods, 1);
 
     // Set keyring params
     par.setKeyringParams(KEYRING_WHITELIST, KEYRING_POLICY);
@@ -115,28 +118,31 @@ contract DeployScript is Script, Constants {
     if (shouldLog) {
       console.log('ParetoDollar deployed at:', address(par));
       // Get the implementation address of the proxy for ParetoDollar
-      address implAddr = Upgrades.getImplementationAddress(proxy);
+      address implAddr = Upgrades.getImplementationAddress(address(par));
       console.log('Proxy implementation address for ParetoDollar:', implAddr);
       // Get the admin address of the proxy for ParetoDollar
-      address proxyAdmin = Upgrades.getAdminAddress(proxy);
-      console.log('Proxy admin address for ParetoDollar:', proxyAdmin);
+      address parAdmin = Upgrades.getAdminAddress(address(par));
+      console.log('Proxy admin address for ParetoDollar:', parAdmin);
+      console.log();
 
       console.log('ParetoDollarQueue deployed at:', address(queue));
       // Get the implementation address of the proxy for ParetoDollarQueue
-      address queueImplAddr = Upgrades.getImplementationAddress(queueProxy);
+      address queueImplAddr = Upgrades.getImplementationAddress(address(queue));
       console.log('Proxy implementation address for ParetoDollarQueue:', queueImplAddr);
       // Get the admin address of the proxy for ParetoDollarQueue
-      address queueProxyAdmin = Upgrades.getAdminAddress(queueProxy);
-      console.log('Proxy admin address for ParetoDollarQueue:', queueProxyAdmin);
+      address queueAdmin = Upgrades.getAdminAddress(address(queue));
+      console.log('Proxy admin address for ParetoDollarQueue:', queueAdmin);
+      console.log();
 
       console.log('ParetoDollarStaking deployed at:', address(sPar));
       // Get the implementation address of the proxy for ParetoDollarStaking
-      address sImplAddr = Upgrades.getImplementationAddress(sProxy);
+      address sImplAddr = Upgrades.getImplementationAddress(address(sPar));
       console.log('Proxy implementation address for ParetoDollarStaking:', sImplAddr);
       // Get the admin address of the proxy for ParetoDollarStaking
-      address sProxyAdmin = Upgrades.getAdminAddress(sProxy);
-      console.log('Proxy admin address for ParetoDollarStaking:', sProxyAdmin);
-      
+      address sParAdmin = Upgrades.getAdminAddress(address(sPar));
+      console.log('Proxy admin address for ParetoDollarStaking:', sParAdmin);
+      console.log();
+
       console.log('IMPORTANT: Queue contract should be whitelisted on each credit vault');
     }
   }

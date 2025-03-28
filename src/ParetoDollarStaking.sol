@@ -7,6 +7,19 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "./EmergencyUtils.sol";
 
+import "forge-std/console.sol";
+
+/* 
+
+██████╗  █████╗ ██████╗ ███████╗████████╗ ██████╗     ███████╗██╗   ██╗███████╗██████╗ 
+██╔══██╗██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔═══██╗    ██╔════╝██║   ██║██╔════╝██╔══██╗
+██████╔╝███████║██████╔╝█████╗     ██║   ██║   ██║    ███████╗██║   ██║███████╗██████╔╝
+██╔═══╝ ██╔══██║██╔══██╗██╔══╝     ██║   ██║   ██║    ╚════██║██║   ██║╚════██║██╔═══╝ 
+██║     ██║  ██║██║  ██║███████╗   ██║   ╚██████╔╝    ███████║╚██████╔╝███████║██║     
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝    ╚═════╝     ╚══════╝ ╚═════╝ ╚══════╝╚═╝     
+
+*/ 
+
 /// @title ParetoDollarStaking - A staking contract for ParetoDollar
 /// @notice Users can stake ParetoDollar to earn yield from Pareto Credit Vaults. 
 /// on deposits a staked version of the token is minted (sUSP) and can be redeemed for ParetoDollar after a cooldown period.
@@ -18,6 +31,7 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   //////////////
 
   error FeeTooHigh();
+  error NotAllowed();
 
   //////////////
   /// Events ///
@@ -54,6 +68,8 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   uint256 public fee;
   /// @notice address to receive fees
   address public feeReceiver;
+  /// @notice ParetoDollarQueue contract address.
+  address public queue;
 
   //////////////////////////
   /// Initialize methods ///
@@ -69,11 +85,13 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   /// @param _admin The address of the admin.
   /// @param _pauser The address of the pauser.
   /// @param _managers The addresses of the managers.
+  /// @param _queue The address of the ParetoDollarQueue contract.
   function initialize(
     address _paretoDollar,
     address _admin,
     address _pauser,
-    address[] memory _managers
+    address[] memory _managers,
+    address _queue
   ) public initializer {
     __ERC20_init(NAME, SYMBOL);
     __ERC4626_init(IERC20(_paretoDollar));
@@ -89,6 +107,7 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
     rewardsVesting = 7 days;
     fee = FEE_100 / 20; // 5%
     feeReceiver = _admin;
+    queue = _queue;
   }
 
   //////////////////////////
@@ -155,11 +174,13 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
     feeReceiver = _feeReceiver;
   }
 
-  /// @notice Deposit rewards to the contract.
+  /// @notice Deposit rewards (ParetoDollars) to the contract.
   /// @dev if method is called when prev rewards are not yet vested, old rewards become vested
   /// @param amount The amount of rewards to deposit.
   function depositRewards(uint256 amount) external {
-    _checkRole(MANAGER_ROLE);
+    if (msg.sender != queue) {
+      revert NotAllowed();
+    }
     // transfer rewards from caller to this contract
     IERC20(asset()).safeTransferFrom(msg.sender, address(this), amount);
 
