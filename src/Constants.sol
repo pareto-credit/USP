@@ -22,13 +22,19 @@ contract Constants {
   uint8 public constant USDT_FEED_DECIMALS = 8;
   address public constant USDT_FALLBACK_FEED = address(0);
   uint8 public constant USDT_FALLBACK_FEED_DECIMALS = 0;
+  // USDS feed data
+  address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
+  address public constant USDS_FEED = 0xfF30586cD0F29eD462364C7e81375FC0C71219b1;
+  uint8 public constant USDS_FEED_DECIMALS = 8;
+  address public constant USDS_FALLBACK_FEED = address(0);
+  uint8 public constant USDS_FALLBACK_FEED_DECIMALS = 0;
   // Fas USDT credit vault
   address public constant FAS_USDC_CV = 0xf6223C567F21E33e859ED7A045773526E9E3c2D5;
   address public constant AA_FAS_USDC_CV = 0x45054c6753b4Bce40C5d54418DabC20b070F85bE;
-  // sUSDS
-  address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
+  // sUSDS ERC4626 vault
   address public constant SUSDS = 0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD;
   address public constant USDS_USDC_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
+
   // Credit vaults methods sig
   // bytes4(keccak256(bytes("depositAA(uint256)")))
   bytes4 public constant DEPOSIT_AA_SIG = 0xb450dfce;
@@ -38,4 +44,16 @@ contract Constants {
   bytes4 public constant CLAIM_REQ_SIG = 0x33986ffa;
   // bytes4(keccak256(bytes("claimInstantWithdrawRequest()")))
   bytes4 public constant CLAIM_INSTANT_REQ_SIG = 0x991052b7;
+  // ERC4626 vaults methods sig
+  // bytes4(keccak256(bytes("deposit(uint256,address)")))
+  bytes4 public constant DEPOSIT_4626_SIG = 0x6e553f65;
+  // bytes4(keccak256(bytes("withdraw(uint256,address,address)")))
+  bytes4 public constant WITHDRAW_4626_SIG = 0xb460af94;
+  // bytes4(keccak256(bytes("redeem(uint256,address,address)")))
+  bytes4 public constant REDEEM_4626_SIG = 0xba087652;
+  // USDS-USDC PSM methods sig
+  // bytes4(keccak256(bytes("buyGem(address,uint256)")))
+  bytes4 public constant BUY_GEM_SIG = 0x8d7ef9bb;
+  // bytes4(keccak256(bytes("sellGem(address,uint256)")))
+  bytes4 public constant SELL_GEM_SIG = 0x95991276;
 }

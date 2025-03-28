@@ -40,6 +40,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
   /// @notice role allowed to move funds out of the contract
   bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+  address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
+  address public constant USDS_USDC_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
 
   /////////////////////////
   /// Storage variables ///
@@ -98,6 +100,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     epochNumber = 1;
     // add allowance for ParetoDollar to ParetoDollarStaking
     IERC20Metadata(_par).safeIncreaseAllowance(_sPar, type(uint256).max);
+    // add allowance for USDS to USDS-USDC PSM
+    IERC20Metadata(USDS).safeIncreaseAllowance(USDS_USDC_PSM, type(uint256).max);
   }
 
   //////////////////////
@@ -168,7 +172,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @return The total value of the Pareto Credit Vault in this contract.
   function scaledNAVCreditVault(address yieldSource, address vaultToken, IERC20Metadata token) public view returns (uint256) {
     IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
-    // tranche balance in this contract (which have 18 decimals) * price / 10 ** underlying decimals)
+    // tranche balance in this contract (which have 18 decimals) * price (in underlying decimals) / 10 ** underlying decimals
     return IERC20Metadata(vaultToken).balanceOf(address(this)) * cv.virtualPrice(cv.AATranche()) / 10 ** (token.decimals());
   }
 
@@ -177,7 +181,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @return The total value of the ERC4626 vault in this contract.
   function scaledNAVERC4626(IERC4626 vault) public view returns (uint256) {
     // ERC4626 vault
-    return vault.convertToAssets(vault.balanceOf(address(this))) / 10 ** (vault.decimals());
+    // convertToAssets returns value in underlying decimals so we scale it to 18 decimals
+    return vault.convertToAssets(vault.balanceOf(address(this))) * 10 ** (18 - IERC20Metadata(vault.asset()).decimals());
   }
 
   //////////////////////////

@@ -78,7 +78,7 @@ contract DeployScript is Script, Constants {
       )
     ));
 
-    // add fasanara yield source with 0 max cap (ie unlimited)
+    // add fasanara yield source
     bytes4[] memory allowedMethods = new bytes4[](4);
     allowedMethods[0] = DEPOSIT_AA_SIG;
     allowedMethods[1] = WITHDRAW_AA_SIG;
@@ -86,6 +86,23 @@ contract DeployScript is Script, Constants {
     allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
     uint256 maxCap = 100_000_000 * 1e6; // 100M USDC
     queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, maxCap, allowedMethods, 1);
+
+    // add sky.money sUSDS yield source
+    allowedMethods = new bytes4[](3);
+    allowedMethods[0] = DEPOSIT_4626_SIG;
+    allowedMethods[1] = WITHDRAW_4626_SIG;
+    allowedMethods[2] = REDEEM_4626_SIG;
+    maxCap = 100_000_000 * 1e18; // 100M USDS
+    queue.addYieldSource(SUSDS, USDS, SUSDS, maxCap, allowedMethods, 2);
+
+    // add sky.money USDS-USDC PSM as a "yield source" with 0 max cap (ie unlimited)
+    // we are approving only USDS to be swapped for USDC when calling `addYieldSource` the opposite is done 
+    // directly in the `initialize`
+    // "Gem" is USDC here
+    allowedMethods = new bytes4[](2);
+    allowedMethods[0] = BUY_GEM_SIG;
+    allowedMethods[1] = SELL_GEM_SIG;
+    queue.addYieldSource(USDS_USDC_PSM, USDC, USDS, 0, allowedMethods, 0);
 
     // Set keyring params
     par.setKeyringParams(KEYRING_WHITELIST, KEYRING_POLICY);
@@ -108,6 +125,16 @@ contract DeployScript is Script, Constants {
       USDT_FEED_DECIMALS,
       USDT_FALLBACK_FEED,
       USDT_FALLBACK_FEED_DECIMALS
+    );
+
+    // Add USDS collateral
+    par.addCollateral(
+      USDS,
+      IERC20Metadata(USDS).decimals(),
+      USDS_FEED,
+      USDS_FEED_DECIMALS,
+      USDS_FALLBACK_FEED,
+      USDS_FALLBACK_FEED_DECIMALS
     );
 
     // transfer ownership of ParetoDollar to TL_MULTISIG

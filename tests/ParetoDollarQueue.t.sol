@@ -20,6 +20,7 @@ import { IIdleCreditVault } from "../src/interfaces/IIdleCreditVault.sol";
 import { IKeyring } from "../src/interfaces/IKeyring.sol";
 import { DeployScript, Constants } from "../script/Deploy.s.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC4626 } from  "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
 contract TestParetoDollarQueue is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
@@ -52,6 +53,8 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(address(queue.par()), address(par), 'ParetoDollar address is wrong');
     assertEq(address(queue.sPar()), address(sPar), 'ParetoDollarStaking address is wrong');
     assertEq(IERC20Metadata(address(par)).allowance(address(queue), address(sPar)), type(uint256).max, 'allowance for staking contract is wrong');
+    assertEq(IERC20Metadata(USDC).allowance(address(queue), address(USDS_USDC_PSM)), type(uint256).max, 'allowance for USDC for PSM contract is wrong');
+    assertEq(IERC20Metadata(USDS).allowance(address(queue), address(USDS_USDC_PSM)), type(uint256).max, 'allowance for USDS for PSM contract is wrong');
 
     assertEq(queue.hasRole(queue.DEFAULT_ADMIN_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have DEFAULT_ADMIN_ROLE');
     assertEq(queue.hasRole(queue.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
@@ -59,19 +62,46 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(queue.hasRole(queue.MANAGER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have MANAGER_ROLE');
     assertEq(queue.isPausable(), true, 'the contract should be pausable');
     assertEq(queue.epochNumber(), 1, 'epoch number should be 0');
+    assertEq(queue.getAllYieldSources().length, 3, 'yield source length is wrong');
     assertEq(queue.getAllYieldSources()[0].source, FAS_USDC_CV, 'yield source is wrong');
+    assertEq(queue.getAllYieldSources()[1].source, SUSDS, 'yield source 2 is wrong');
+    assertEq(queue.getAllYieldSources()[2].source, USDS_USDC_PSM, 'yield source 3 is wrong');
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
     assertEq(address(source.token), USDC, 'token is wrong');
+    assertEq(source.source, FAS_USDC_CV, 'source is wrong');
     assertEq(source.vaultToken, AA_FAS_USDC_CV, 'vault token is wrong');
     assertEq(source.maxCap, 100_000_000 * 1e6, 'vault max cap is wrong');
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
+    assertEq(source.vaultType, 1, 'vault type deposited amount is wrong');
     assertEq(source.allowedMethods.length, 4, 'vault allowed methods is wrong');
-
     assertEq(source.allowedMethods[0], DEPOSIT_AA_SIG, 'first allowed method is wrong');
     assertEq(source.allowedMethods[1], WITHDRAW_AA_SIG, 'second allowed method is wrong');
     assertEq(source.allowedMethods[2], CLAIM_REQ_SIG, 'third allowed method is wrong');
     assertEq(source.allowedMethods[3], CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
+
+    ParetoDollarQueue.YieldSource memory sourceUSDS = queue.getYieldSource(SUSDS);
+    assertEq(address(sourceUSDS.token), USDS, 'token for USDS source is wrong');
+    assertEq(sourceUSDS.source, SUSDS, 'source for USDS source is wrong');
+    assertEq(sourceUSDS.vaultToken, SUSDS, 'vault token for USDS source is wrong');
+    assertEq(sourceUSDS.maxCap, 100_000_000 * 1e18, 'vault max cap for USDS source is wrong');
+    assertEq(sourceUSDS.depositedAmount, 0, 'vault deposited amount for USDS source is wrong');
+    assertEq(sourceUSDS.vaultType, 2, 'vault type for USDS source deposited amount is wrong');
+    assertEq(sourceUSDS.allowedMethods.length, 3, 'vault allowed methods for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[0], DEPOSIT_4626_SIG, 'first allowed method for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[1], WITHDRAW_4626_SIG, 'second allowed method for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[2], REDEEM_4626_SIG, 'third allowed method for USDS source is wrong');
+
+    ParetoDollarQueue.YieldSource memory sourcePSM = queue.getYieldSource(USDS_USDC_PSM);
+    assertEq(address(sourcePSM.token), USDC, 'token for USDS PSM source is wrong');
+    assertEq(sourcePSM.source, USDS_USDC_PSM, 'source for USDS PSM source is wrong');
+    assertEq(sourcePSM.vaultToken, USDS, 'vault token for USDS PSM source is wrong');
+    assertEq(sourcePSM.maxCap, 0, 'vault max cap for USDS PSM source is wrong');
+    assertEq(sourcePSM.depositedAmount, 0, 'vault deposited amount for USDS PSM source is wrong');
+    assertEq(sourcePSM.vaultType, 0, 'vault type for USDS PSM source deposited amount is wrong');
+    assertEq(sourcePSM.allowedMethods.length, 2, 'vault allowed methods for USDS PSM source is wrong');
+    assertEq(sourcePSM.allowedMethods[0], BUY_GEM_SIG, 'first allowed method for USDS PSM source is wrong');
+    assertEq(sourcePSM.allowedMethods[1], SELL_GEM_SIG, 'second allowed method for USDS PSM source is wrong');
   }
 
   function testEmergencyWithdraw() external {
@@ -200,8 +230,8 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(source.allowedMethods[3], CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
 
     // one source was added at deployment and another one in this test
-    assertEq(queue.getAllYieldSources().length, 2, 'there should be only two yield sources');
-    assertEq(queue.getAllYieldSources()[1].source, address(cdo), 'yield source is wrong');
+    assertEq(queue.getAllYieldSources().length, 4, 'there should be 4 yield sources');
+    assertEq(queue.getAllYieldSources()[3].source, address(cdo), 'yield source is wrong');
     // check allowance
     assertEq(IERC20Metadata(USDC).allowance(address(queue), address(cdo)), type(uint256).max, 'allowance is wrong');
     vm.stopPrank();
@@ -225,7 +255,10 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(source.vaultToken, address(0), 'vault token is wrong');
     assertEq(source.vaultType, 0, 'vault type is wrong');
     assertEq(source.allowedMethods.length, 0, 'vault allowed methods should be removed');
-    assertEq(queue.getAllYieldSources().length, 0, 'there should be no yield sources');
+    assertEq(queue.getAllYieldSources().length, 2, 'there should be 2 yield sources');
+    // we removed the first yield source so the last one (USDS_USDC_PSM) will replace it 
+    assertEq(queue.getAllYieldSources()[0].source, USDS_USDC_PSM, 'first yield source should be USDS_USDC_PSM');
+    assertEq(queue.getAllYieldSources()[1].source, SUSDS, 'second yield source should be SUSDS');
     // check allowance
     assertEq(IERC20Metadata(USDC).allowance(address(queue), FAS_USDC_CV), 0, 'allowance should be removed');
     vm.stopPrank();
@@ -244,6 +277,10 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _mintUSP(address(this), USDT, 2e6);
     // the result is scaled to 18 decimals
     assertEq(queue.getUnlentBalanceScaled(), 3e18, 'total collateral should be updated after second deposit');
+
+    // buy USDS
+    _sellUSDCPSM(1e6);
+    assertEq(queue.getUnlentBalanceScaled(), 3e18, 'total collateral should be updated after USDS buy');
   }
 
   function testDepositFundsSingleVault() external {
@@ -649,15 +686,29 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 amount = 100e6;
     _mintUSP(address(this), USDC, amount);
     assertEq(queue.getTotalCollateralsScaled(), 100 * 1e18, 'totCollaterals is not considering unlent balance');
+    // deposit in CV half of the funds
     _depositFundsCV(FAS_USDC_CV, amount / 2);
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 100 * 1e18, 1, 'totCollaterals value after CV deposit is not correct');
+    // deposit additional 100 USDC
     _mintUSP(address(123), USDC, amount);
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1, 'totCollaterals value after second deposit is not correct');
+    // deposit in CV all funds
     uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount / 2 + amount);
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 2, 'totCollaterals value after second CV deposit is not correct');
+    // redeem all funds from CV
     _getFundsFromCV(FAS_USDC_CV, trancheAmount, 1);
     // diff is 1e12 (ie 1 wei of a token with 6 decimals scaled to 1e18)
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1e12, 'totCollaterals value after CV redeem is not correct');
+    // get USDS for half of the total amount
+    _sellUSDCPSM(amount);
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1e12, 'totCollaterals value after USDS buy is not correct');
+    uint256 scaleFactor = 10 ** 12; // 10 ** (18 - USDC.decimals())
+    // deposit all USDS to get SUSDS
+    uint256 sUSDS = _deposit4626(SUSDS, amount * scaleFactor);
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1e12 + 1, 'totCollaterals value after SUSDS deposit is not correct');
+    // redeem all from SUSDS
+    _redeem4626(SUSDS, sUSDS, 1);
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1e12 + 1, 'totCollaterals value after SUSDS redeem is not correct');
   }
 
   function testDepositYield() external {
@@ -695,6 +746,23 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _depositYield();
 
     assertApproxEqAbs(par.totalSupply(), initialSupply + gainScaled18, 1, 'total supply should increase by the yield gained');
+  }
+
+  function testPSMInteractions() external {
+    // deposit 100 USDC in the ParetoDollar
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount);
+
+    // use PSM to swap 100 USDC for 100 USDS  
+    _sellUSDCPSM(amount);
+    assertEq(IERC20Metadata(USDS).balanceOf(address(queue)), 100 * 1e18, 'queue should have 100 USDS');
+    assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), 0, 'queue should not have USDC');
+
+    // use PSM to swap 100 USDS for 100 USDC. 
+    // Amount must be passed in USDC
+    _buyUSDCPSM(amount);
+    assertEq(IERC20Metadata(USDS).balanceOf(address(queue)), 0, 'queue should not have USDS');
+    assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), amount, 'queue should have 100 USDC');
   }
 
   function _depositYield() internal {
@@ -741,6 +809,63 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
     address aaTranche = IIdleCDOEpochVariant(FAS_USDC_CV).AATranche();
     return IERC20Metadata(aaTranche).balanceOf(address(queue));
+  }
+
+  /// @notice deposit in ERC4626 vault
+  function _deposit4626(address source, uint256 amount) internal returns (uint256 amount4626) {
+    // call with method not allowed should revert 
+    address[] memory sources = new address[](1);
+    sources[0] = source;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = DEPOSIT_4626_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode(amount, address(queue));
+    vm.prank(TL_MULTISIG);
+    queue.depositFunds(sources, methods, args);
+
+    // source is usually the erc4626 token itself
+    return IERC20Metadata(source).balanceOf(address(queue));
+  }
+
+  /// @notice redeem from ERC4626 vault
+  function _redeem4626(address source, uint256 shares, uint256 _epoch) internal returns (uint256) {
+    // call with method not allowed should revert
+    address[] memory sources = new address[](1);
+    sources[0] = source;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = REDEEM_4626_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode(shares, address(queue), address(queue));
+    vm.prank(TL_MULTISIG);
+    queue.redeemFunds(sources, methods, args, _epoch);
+
+    return IERC20Metadata(IERC4626(source).asset()).balanceOf(address(queue));
+  }
+
+  // buy USDC with USDS via PSM
+  function _buyUSDCPSM(uint256 amount) internal {
+    // call with method not allowed should revert 
+    address[] memory sources = new address[](1);
+    sources[0] = USDS_USDC_PSM;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = BUY_GEM_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode(address(queue), amount);
+    vm.prank(TL_MULTISIG);
+    queue.callWhitelistedMethods(sources, methods, args);
+  }
+
+  // sell USDC for USDS via PSM
+  function _sellUSDCPSM(uint256 amount) internal {
+    // call with method not allowed should revert 
+    address[] memory sources = new address[](1);
+    sources[0] = USDS_USDC_PSM;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = SELL_GEM_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode(address(queue), amount);
+    vm.prank(TL_MULTISIG);
+    queue.callWhitelistedMethods(sources, methods, args);
   }
 
   /// @notice call queue.callWhitelistedMethods
