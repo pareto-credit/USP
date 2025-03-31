@@ -72,9 +72,10 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(usdtCollateral.fallbackPriceFeedDecimals, USDT_FALLBACK_FEED_DECIMALS, 'Fallback price feed for USDT should have 8 decimals');
 
     address[] memory collaterals = par.getCollaterals();
-    assertEq(collaterals.length, 2, 'There should be 2 collaterals');
+    assertEq(collaterals.length, 3, 'There should be 2 collaterals');
     assertEq(collaterals[0], USDC, 'First collateral address in getCollaterals should be USDC');
     assertEq(collaterals[1], USDT, 'Second collateral address in getCollaterals should be USDT');
+    assertEq(collaterals[2], USDS, 'Third collateral address in getCollaterals should be USDS');
   }
 
   function testAddCollateral() external {
@@ -103,8 +104,8 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(newCollateral.fallbackPriceFeedDecimals, 10, 'Fallback price feed for USDT should have 8 decimals');
 
     address[] memory collaterals = par.getCollaterals();
-    assertEq(collaterals.length, 3, 'There should be 3 collaterals');
-    assertEq(collaterals[2], address(1), 'New collateral address in getCollaterals should be address(1)');
+    assertEq(collaterals.length, 4, 'There should be 4 collaterals');
+    assertEq(collaterals[3], address(1), 'New collateral address in getCollaterals should be address(1)');
     vm.stopPrank();
   }
 
@@ -130,8 +131,9 @@ contract TestParetoDollar is Test, DeployScript {
     vm.stopPrank();
 
     address[] memory collaterals = par.getCollaterals();
-    assertEq(collaterals.length, 1, 'There should be 1 collateral');
-    assertEq(collaterals[0], USDT, 'First collateral address in getCollaterals should be USDT');
+    assertEq(collaterals.length, 2, 'There should be 1 collateral');
+    assertEq(collaterals[0], USDS, 'First collateral address in getCollaterals should be USDS');
+    assertEq(collaterals[1], USDT, 'Second collateral address in getCollaterals should be USDT');
   }
 
   function testSetKeyringParams() external {
@@ -161,6 +163,27 @@ contract TestParetoDollar is Test, DeployScript {
     uint256 balPost = IERC20Metadata(USDC).balanceOf(par.owner());
     assertEq(balPost, balPre + 100, 'owner balance should increase by 100');
     vm.stopPrank();
+  }
+
+  function testEmergencyBurn() external {
+    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    par.emergencyBurn(1e18);
+
+    address owner = par.owner();
+    // allow anyone to mint
+    vm.prank(owner);
+    par.setKeyringParams(address(0), 1);
+
+    vm.startPrank(owner);
+    deal(USDC, owner, 1e6);
+    IERC20Metadata(USDC).approve(address(par), 1e6);
+    par.mint(USDC, 1e6);
+    // burn
+    par.emergencyBurn(1e18 / 2);
+    vm.stopPrank();
+
+    assertEq(par.totalSupply(), 1e18 / 2, 'totalSupply is wrong');
+    assertEq(par.balanceOf(owner), 1e18 / 2, 'balanceOf owner is wrong after burn');
   }
 
   function testPause() external {

@@ -281,6 +281,44 @@ contract TestParetoDollarStaking is Test, DeployScript {
     sPar.updateFeeParams(maxFee + 1, address(this));
   }
 
+  function testLossMgmt() external {
+    _mintUSP(address(this), 1e6); // 1 USDC
+    uint256 depositAmount = 1e18; // 1 USP (which has 18 decimals)
+    _stake(address(this), depositAmount);
+
+    assertEq(par.totalSupply(), depositAmount, 'totalSupply is wrong after mint');
+
+    uint256 balPre = par.balanceOf(address(sPar));
+    uint256 pricePre = sPar.convertToAssets(1e18);
+    vm.startPrank(sPar.owner());
+    sPar.emergencyWithdraw(address(par), 1e18 / 2);
+    vm.stopPrank();
+
+    uint256 balPost = par.balanceOf(address(sPar));
+    uint256 pricePost = sPar.convertToAssets(1e18);
+    assertEq(balPost, balPre / 2, 'sPar balance should be halved');
+    assertEq(pricePost, pricePre / 2, 'sPar price should be halved');
+    assertEq(par.balanceOf(sPar.owner()), balPre / 2, 'sPar balance of owner is not correct');
+
+    // burn amount on par contract
+    vm.startPrank(par.owner());
+    par.emergencyBurn(par.balanceOf(par.owner()));
+    vm.stopPrank();
+
+    assertEq(par.totalSupply(), depositAmount / 2, 'totalSupply is wrong after burn');
+    assertEq(par.balanceOf(par.owner()), 0, 'owner should have no balance');
+  }
+
+  function _mintUSP(address _who, uint256 _amount) internal {
+    vm.prank(par.owner());
+    par.setKeyringParams(address(0), 1);
+
+    deal(USDC, _who, _amount);
+    IERC20Metadata(USDC).approve(address(par), _amount);
+
+    par.mint(USDC, _amount);
+  }
+
   function _stake(address _who, uint256 _amount) internal returns (uint256 shares) {
     deal(address(par), address(_who), _amount);
     vm.startPrank(_who);

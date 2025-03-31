@@ -224,9 +224,24 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     return collateralInfo[token];
   }
 
+  /// @notice Retrieve the list of collateral tokens.
+  /// @return The list of collateral token addresses.
+  function getCollaterals() external view returns (address[] memory) {
+    return collaterals;
+  }
+
   ///////////////////////
   /// Admin functions ///
   ///////////////////////
+
+  /// @notice Burn USP from owner. This is used when there is a loss from one of the borrower
+  /// and USP are withdrawed by the owner from the sUSP contract. In this way sUSP holders will absorb the loss
+  /// @param _uspAmount amount of USP to burn.
+  function emergencyBurn(uint256 _uspAmount) external {
+    _checkOwner();
+
+    _burn(msg.sender, _uspAmount);
+  }
 
   /// @notice Add new collateral
   /// @param token The collateral token address.
@@ -290,12 +305,6 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     }
     // mint ParetoDollar to the queue
     _mint(address(queue), _amount);
-  }
-
-  /// @notice Retrieve the list of collateral tokens.
-  /// @return The list of collateral token addresses.
-  function getCollaterals() external view returns (address[] memory) {
-    return collaterals;
   }
 
   /// @notice update keyring address
