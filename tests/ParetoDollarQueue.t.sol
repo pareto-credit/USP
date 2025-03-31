@@ -765,6 +765,31 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), amount, 'queue should have 100 USDC');
   }
 
+  function testAllowedReceiverParamExternalCalls() external {
+    // deposit 100 USDC in the ParetoDollar
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount);
+
+    address random = makeAddr('random');
+
+    vm.startPrank(TL_MULTISIG);
+    // PSM methods that have an address different than queue address should revert
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
+    _callWhitelistedMethods(USDS_USDC_PSM, BUY_GEM_SIG, abi.encode(random, amount));
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
+    _callWhitelistedMethods(USDS_USDC_PSM, SELL_GEM_SIG, abi.encode(random, amount));
+
+    // same for ERC4626 methods
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
+    _callWhitelistedMethods(SUSDS, DEPOSIT_4626_SIG, abi.encode(random, amount));
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
+    _callWhitelistedMethods(SUSDS, REDEEM_4626_SIG, abi.encode(amount, random, address(queue)));
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
+    _callWhitelistedMethods(SUSDS, WITHDRAW_4626_SIG, abi.encode(amount, random, address(queue)));
+
+    vm.stopPrank();
+  }
+
   function _depositYield() internal {
     vm.prank(TL_MULTISIG);
     queue.depositYield();
@@ -793,6 +818,17 @@ contract TestParetoDollarQueue is Test, DeployScript {
   function _stopEpoch() internal {
     vm.prank(TL_MULTISIG);
     queue.stopEpoch();
+  }
+
+  function _callWhitelistedMethods(address source, bytes4 method, bytes memory _args) internal {
+    // call with method not allowed should revert
+    address[] memory sources = new address[](1);
+    sources[0] = source;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = method;
+    bytes[] memory args = new bytes[](1);
+    args[0] = _args;
+    queue.callWhitelistedMethods(sources, methods, args);
   }
 
   /// @notice call queue.depositFunds

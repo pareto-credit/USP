@@ -10,6 +10,7 @@ import "./interfaces/IParetoDollarStaking.sol";
 import "./interfaces/IParetoDollarQueue.sol";
 import "./interfaces/IIdleCDOEpochVariant.sol";
 import "./EmergencyUtils.sol";
+import "./Constants.sol";
 
 /* 
 
@@ -23,7 +24,7 @@ import "./EmergencyUtils.sol";
 */
 
 /// @title ParetoDollarQueue - Contract to queue redemptions for ParetoDollar
-contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, EmergencyUtils {
+contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, EmergencyUtils, Constants {
   using SafeERC20 for IERC20Metadata;
 
   ///////////////////
@@ -40,8 +41,6 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
   /// @notice role allowed to move funds out of the contract
   bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-  address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
-  address public constant USDS_USDC_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
 
   /////////////////////////
   /// Storage variables ///
@@ -245,6 +244,22 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @param _args The arguments to pass to the method.
   /// @return The return data from the call.
   function _externalCall(address _target, bytes4 _method, bytes memory _args) internal returns (bytes memory) {
+    // we restrict params so that destination address for PSM and 4626 are always set to this contract
+    address _receiver = address(this);
+    if (_method == BUY_GEM_SIG || _method == SELL_GEM_SIG) {
+      // first param should be address(this) for interactions with USDS_USDC_PSM
+      (_receiver,) = abi.decode(_args, (address, uint256));
+    } else if (_method == DEPOSIT_4626_SIG) {
+      // second param should be address(this) for deposits in 4626 vaults
+      (,_receiver) = abi.decode(_args, (uint256, address));
+    } else if (_method == WITHDRAW_4626_SIG || _method == REDEEM_4626_SIG) {
+      // second param should be address(this) for redeem/withdraw from 4626 vaults
+      (,_receiver,) = abi.decode(_args, (uint256, address, address));
+    }
+    if (_receiver != address(this)) {
+      revert ParamNotAllowed();
+    }
+    
     (bool success, bytes memory returnData) = _target.call(abi.encodePacked(_method, _args));
     require(success, _getRevertMsg(returnData));
     return returnData;

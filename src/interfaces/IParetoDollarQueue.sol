@@ -13,6 +13,7 @@ interface IParetoDollarQueue {
   error YieldSourceInvalid();
   error InsufficientBalance();
   error MaxCap();
+  error ParamNotAllowed();
 
   //////////////
   /// Events ///
