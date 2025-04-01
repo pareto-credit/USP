@@ -711,6 +711,19 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1e12 + 1, 'totCollaterals value after SUSDS redeem is not correct');
   }
 
+  function testGetTotalCollateralsScaledCVRequestRedeem() external {
+    // deposit 100 USDC in the ParetoDollar
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount);
+    // deposit funds in CV
+    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount);
+    // request redeem from CV for half of the funds
+    _requestRedeemCV(FAS_USDC_CV, trancheAmount / 2);
+    // check that the total collateral is equal to the amount requested for redeem in CV
+    // the diff is 1e12 (ie 1 wei of a token with 6 decimals scaled to 1e18)
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), amount * 1e12, 1e12, 'totCollaterals value after CV redeem request is not correct');
+  }
+
   function testDepositYield() external {
     vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
     queue.depositYield();

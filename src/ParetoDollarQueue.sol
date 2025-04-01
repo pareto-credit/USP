@@ -9,6 +9,7 @@ import "./interfaces/IParetoDollar.sol";
 import "./interfaces/IParetoDollarStaking.sol";
 import "./interfaces/IParetoDollarQueue.sol";
 import "./interfaces/IIdleCDOEpochVariant.sol";
+import "./interfaces/IIdleCreditVault.sol";
 import "./EmergencyUtils.sol";
 import "./Constants.sol";
 
@@ -171,8 +172,14 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @return The total value of the Pareto Credit Vault in this contract.
   function scaledNAVCreditVault(address yieldSource, address vaultToken, IERC20Metadata token) public view returns (uint256) {
     IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
+    IIdleCreditVault strategy = IIdleCreditVault(cv.strategy());
+
+    uint256 decimals = token.decimals();
+    uint256 pending = strategy.withdrawsRequests(address(this)) * 10 ** (18 - decimals);
+    uint256 instantPending = strategy.instantWithdrawsRequests(address(this)) * 10 ** (18 - decimals);
     // tranche balance in this contract (which have 18 decimals) * price (in underlying decimals) / 10 ** underlying decimals
-    return IERC20Metadata(vaultToken).balanceOf(address(this)) * cv.virtualPrice(cv.AATranche()) / 10 ** (token.decimals());
+    // we also need to add eventual pending withdraw requests (both normal and instant) as these requests burn tranche tokens
+    return IERC20Metadata(vaultToken).balanceOf(address(this)) * cv.virtualPrice(cv.AATranche()) / (10 ** decimals) + pending + instantPending;
   }
 
   /// @notice Get the total value in this contract (scaled to 18 decimals) of an ERC4626 vault.
@@ -448,6 +455,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
     // We first fetch total ParetoDollar supply and add the total amount of reserved withdrawals
     // which are ParetoDollars already burned but not yet claimed
+
     uint256 parSupply = IERC20Metadata(address(par)).totalSupply() + totReservedWithdrawals;
     // we calculate the total amount of collaterals available scaled to 18 decimals
     uint256 totCollaterals = getTotalCollateralsScaled();
