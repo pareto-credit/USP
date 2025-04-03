@@ -8,7 +8,7 @@ import { PausableUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/P
 
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import { Test } from "forge-std/Test.sol";
+import { Test, stdStorage, StdStorage } from "forge-std/Test.sol";
 import { console2 } from "forge-std/console2.sol";
 
 import { ParetoDollar } from "../src/ParetoDollar.sol";
@@ -22,6 +22,8 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 
 contract TestParetoDollarStaking is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
+  using stdStorage for StdStorage;
+
   ParetoDollar par;
   ParetoDollarStaking sPar;
   ParetoDollarQueue queue;
@@ -216,17 +218,14 @@ contract TestParetoDollarStaking is Test, DeployScript {
     skip(sPar.rewardsVesting() / 2);
     assertApproxEqAbs(sPar.totalAssets(), depositAmount * 15 / 10, 1, 'Total assets have prev rewards partially vested');
 
-    // we deposit again before the end of the vesting period, prev rewards are now fully vested
-    depositRewards(depositAmount);
-    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 2, 1, 'Total assets have prev rewards fully vested');
-    assertEq(sPar.rewards(), depositAmount, 'New rewards should be deposited');
-    assertEq(sPar.rewardsLastDeposit(), block.timestamp, 'RewardsLastDeposit should be updated again');
+    // we deposit again before the end of the vesting period
+    vm.startPrank(address(queue));
+    vm.expectRevert(abi.encodeWithSelector(ParetoDollarStaking.NotAllowed.selector));
+    sPar.depositRewards(depositAmount);
+    vm.stopPrank();
 
     skip(sPar.rewardsVesting() / 2);
-    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 25 / 10, 1, 'Total assets have second tranche of rewards partially vested');
-
-    skip(sPar.rewardsVesting() / 2);
-    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 3, 1, 'Total assets have second tranche of rewards fully vested');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 2, 1, 'Total assets have second tranche of rewards partially vested');
 
     // deposit rewards cannot be called by non managers
     vm.startPrank(address(this));
@@ -249,18 +248,37 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(par.balanceOf(feeReceiver), expectedFees, 'Fees should be transferred to feeReceiver');
 
     skip(sPar.rewardsVesting() + 1);
-    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 39 / 10, 1, 'Total assets have rewards vested minus fee');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 29 / 10, 1, 'Total assets have rewards vested minus fee');
   }
 
   function testUpdateRewardsVesting() external {
-    vm.prank(sPar.owner());
-    sPar.updateRewardsVesting(2 days);
-    assertEq(sPar.rewardsVesting(), 2 days, 'RewardsVesting should be 2 days');
-
     // test with non owner
     vm.prank(address(this));
     vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
     sPar.updateRewardsVesting(1 days);
+
+    vm.startPrank(sPar.owner());
+    sPar.updateRewardsVesting(2 days);
+    assertEq(sPar.rewardsVesting(), 2 days, 'RewardsVesting should be 2 days');
+
+    // set rewardsLastDeposit so that rewards are not fully vested
+    stdstore
+      .target(address(sPar))
+      .sig(sPar.rewardsLastDeposit.selector)
+      .checked_write(block.timestamp - (2 days - 1));
+    
+    vm.expectRevert(abi.encodeWithSelector(ParetoDollarStaking.NotAllowed.selector));
+    sPar.updateRewardsVesting(1 days);
+
+    // set rewardsLastDeposit so that rewards are vested
+    stdstore
+      .target(address(sPar))
+      .sig(sPar.rewardsLastDeposit.selector)
+      .checked_write(block.timestamp - 2 days);
+
+    vm.expectRevert(abi.encodeWithSelector(ParetoDollarStaking.NotAllowed.selector));
+    sPar.updateRewardsVesting(2 days + 1);
+    vm.stopPrank();
   }
 
   function testUpdateFeeParams() external {

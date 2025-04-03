@@ -159,6 +159,11 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   /// @param _rewardsVesting The new rewards vesting period.
   function updateRewardsVesting(uint256 _rewardsVesting) external {
     _checkOwner();
+    uint256 _lastDeposit = rewardsLastDeposit;
+    // check that old rewards are all vested and that the new vesting period won't re-vest rewards already released
+    if (block.timestamp < _lastDeposit + rewardsVesting || block.timestamp < _lastDeposit + _rewardsVesting) {
+      revert NotAllowed();
+    }
     rewardsVesting = _rewardsVesting;
   }
 
@@ -175,10 +180,10 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   }
 
   /// @notice Deposit rewards (ParetoDollars) to the contract.
-  /// @dev if method is called when prev rewards are not yet vested, old rewards become vested
   /// @param amount The amount of rewards to deposit.
   function depositRewards(uint256 amount) external {
-    if (msg.sender != queue) {
+    // check that caller is queue contract and that old rewards are all vested
+    if (msg.sender != queue || block.timestamp < rewardsLastDeposit + rewardsVesting) {
       revert NotAllowed();
     }
     // transfer rewards from caller to this contract
