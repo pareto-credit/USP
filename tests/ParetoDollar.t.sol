@@ -106,6 +106,17 @@ contract TestParetoDollar is Test, DeployScript {
     address[] memory collaterals = par.getCollaterals();
     assertEq(collaterals.length, 4, 'There should be 4 collaterals');
     assertEq(collaterals[3], address(1), 'New collateral address in getCollaterals should be address(1)');
+
+    // overwrite collateral
+    par.addCollateral(address(1), 66, address(22), 88, address(33), 11);
+    IParetoDollar.CollateralInfo memory newCollateral2 = par.getCollateralInfo(address(1));
+    assertEq(newCollateral2.allowed, true, 'new collateral should be allowed');
+    assertEq(newCollateral2.priceFeed, address(22), 'new priceFeed should be set');
+    assertEq(newCollateral2.fallbackPriceFeed, address(33), 'new fallbackPriceFeed should be set');
+    assertEq(newCollateral2.tokenDecimals, 66, 'new should have 6 decimals');
+    assertEq(newCollateral2.priceFeedDecimals, 88, 'Price feed for USDT should have 8 decimals');
+    assertEq(newCollateral2.fallbackPriceFeedDecimals, 11, 'Fallback price feed for USDT should have 8 decimals');
+    assertEq(par.getCollaterals().length, 4, 'Collaterals lenght should not change');
     vm.stopPrank();
   }
 

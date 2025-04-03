@@ -261,6 +261,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     _checkOwner();
 
     if (token == address(0) || priceFeed == address(0)) revert InvalidData();
+    // check if the token is already added
+    bool isOverwriting = collateralInfo[token].allowed;
     collateralInfo[token] = CollateralInfo({
       allowed: true,
       priceFeed: priceFeed,
@@ -270,7 +272,9 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
       fallbackPriceFeedDecimals: fallbackPriceFeedDecimals
     });
     // add the token to the list of collaterals
-    collaterals.push(token);
+    if (!isOverwriting) {
+      collaterals.push(token);
+    }
     emit CollateralAdded(token, priceFeed, fallbackPriceFeed, tokenDecimals, priceFeedDecimals, fallbackPriceFeedDecimals);
   }
 
