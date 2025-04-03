@@ -351,6 +351,48 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.stopPrank();
   }
 
+  function testDepositFundsMultipleVaults() external {
+    // deposit 200 USDC in the vault
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount);
+    _mintUSP(address(this), USDC, amount);
+
+    // convert half of the funds into USDS
+    _sellUSDCPSM(amount);
+    uint256 usdsAmount = amount * 1e12;
+
+    vm.startPrank(TL_MULTISIG);
+    // call with method not allowed should revert
+    address[] memory sources = new address[](2);
+    sources[0] = FAS_USDC_CV;
+    sources[1] = SUSDS;
+    bytes4[] memory methods = new bytes4[](2);
+    methods[0] = DEPOSIT_AA_SIG;
+    methods[1] = DEPOSIT_4626_SIG;
+    bytes[] memory args = new bytes[](2);
+    args[0] = abi.encode(amount);
+    args[1] = abi.encode(usdsAmount, address(queue));
+
+    // set the correct deposit method
+    uint256 balPre = IERC20Metadata(USDC).balanceOf(address(queue));
+    uint256 balPreUSDS = IERC20Metadata(USDS).balanceOf(address(queue));
+
+    vm.expectEmit(true, true, true, true);
+    emit IParetoDollarQueue.YieldSourceDeposit(FAS_USDC_CV, USDC, amount);
+    emit IParetoDollarQueue.YieldSourceDeposit(SUSDS, USDS, usdsAmount); // USDS has 18 decimals
+    queue.depositFunds(sources, methods, args);
+
+    ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
+    ParetoDollarQueue.YieldSource memory sourceSUSDS = queue.getYieldSource(SUSDS);
+    assertEq(source.depositedAmount, amount, 'vault deposited amount is wrong');
+    assertEq(sourceSUSDS.depositedAmount, usdsAmount, 'vault deposited amount for SUSDS is wrong');
+    assertGt(IERC20Metadata(source.vaultToken).balanceOf(address(queue)), 0, 'vault balance should be greater than 0');
+    assertGt(IERC20Metadata(sourceSUSDS.vaultToken).balanceOf(address(queue)), 0, 'vault balance of USDS should be greater than 0');
+    assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), balPre - amount, 'queue token balance should be updated');
+    assertEq(IERC20Metadata(USDS).balanceOf(address(queue)), balPreUSDS - usdsAmount, 'queue token balance of USDS should be updated');
+    vm.stopPrank();
+  }
+
   function testRequestRedeem() external {
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.NotAllowed.selector));
     queue.requestRedeem(address(this), 1e6);
@@ -460,6 +502,49 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.stopPrank();
   }
 
+  function testMultipleCallWhitelistedMethods() external {
+    // we are going to test that we can request a redeem in a credit vault
+    // and swap USDC for USDS
+
+    // deposit 100 USDC in the ParetoDollar
+    uint256 amount = 100e6;
+    _mintUSP(address(this), USDC, amount * 2);
+    // manager deposit funds in credit vault
+    _depositFundsCV(FAS_USDC_CV, amount);
+
+    address aaTranche = IIdleCDOEpochVariant(FAS_USDC_CV).AATranche();
+    IIdleCreditVault strategy = IIdleCreditVault(IIdleCDOEpochVariant(FAS_USDC_CV).strategy());
+    uint256 trancheAmount = IERC20Metadata(aaTranche).balanceOf(address(queue));
+
+    // manager request a redeem
+    address[] memory sources = new address[](2);
+    sources[0] = FAS_USDC_CV;
+    sources[1] = USDS_USDC_PSM;
+    bytes4[] memory methods = new bytes4[](2);
+    methods[0] = WITHDRAW_AA_SIG;
+    methods[1] = SELL_GEM_SIG;
+    bytes[] memory args = new bytes[](2);
+    args[0] = abi.encode(trancheAmount, aaTranche);
+    args[1] = abi.encode(address(queue), amount);
+
+    vm.startPrank(TL_MULTISIG);
+    vm.expectEmit(true, true, true,true);
+    emit IParetoDollarQueue.YieldSourceCall(sources[0], methods[0], args[0]);
+    emit IParetoDollarQueue.YieldSourceCall(sources[1], methods[1], args[1]);
+    queue.callWhitelistedMethods(sources, methods, args);
+
+    assertEq(IERC20Metadata(aaTranche).balanceOf(address(queue)), 0, 'queue should not have any AA tranche');
+    assertApproxEqAbs(
+      strategy.withdrawsRequests(address(queue)), 
+      amount,
+      1,
+      'credit vault should have the withdraw request'
+    );
+
+    assertEq(IERC20Metadata(USDS).balanceOf(address(queue)), amount * 1e12, 'queue contract should have USDS balance');
+    vm.stopPrank();
+  }
+
   function testRedeemFunds() external {
     vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
     queue.redeemFunds(new address[](0), new bytes4[](0), new bytes[](0), 1);
@@ -514,6 +599,55 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.stopPrank();
 
     assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(address(queue)) - balPre, amount, 1, 'queue should bal eq to the amount redeemed');
+    assertEq(queue.epochPending(epoch), 0, 'epoch pending should be eq to 0');
+  }
+
+  function testRedeemFundsMultipleVaults() external {
+    uint256 epoch = queue.epochNumber();
+
+    // we are going to test that we can claim a redeem request in a credit vault
+    // and redeem from SUSDS
+
+    uint256 amount = 100e6;
+    // mint USP
+    _mintUSP(address(this), USDC, amount * 2);
+
+    // manager deposits collateral in CV
+    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount);
+    // manager request redeems
+    _requestRedeemCV(FAS_USDC_CV, trancheAmount);
+    // we start and then stop the CV epoch so we can claim the requested amount
+    _rollEpochCV(FAS_USDC_CV);
+
+    // buy SUSDS
+    _sellUSDCPSM(amount);
+    uint256 usdsAmount = amount *  1e12;
+    uint256 susdsAmount = _deposit4626(SUSDS, usdsAmount);
+
+    // claim the funds previously requested from CV
+    uint256 balPre = IERC20Metadata(USDC).balanceOf(address(queue));
+    uint256 balPreUSDS = IERC20Metadata(USDS).balanceOf(address(queue));
+
+    address[] memory sources = new address[](2);
+    sources[0] = FAS_USDC_CV;
+    sources[1] = SUSDS;
+    bytes4[] memory methods = new bytes4[](2);
+    methods[0] = CLAIM_REQ_SIG;
+    methods[1] = REDEEM_4626_SIG;
+    bytes[] memory args = new bytes[](2);
+    args[0] = abi.encode();
+    args[1] = abi.encode(susdsAmount, address(queue), address(queue));
+
+    vm.startPrank(TL_MULTISIG);
+    vm.expectEmit(true, true, true, true);
+    // amount - 1 for rounding
+    emit IParetoDollarQueue.YieldSourceRedeem(FAS_USDC_CV, USDC, amount - 1);
+    emit IParetoDollarQueue.YieldSourceRedeem(SUSDS, USDS, usdsAmount);
+    queue.redeemFunds(sources, methods, args, 0);
+    vm.stopPrank();
+
+    assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(address(queue)) - balPre, amount, 1, 'queue bal should be eq to the amount redeemed');
+    assertApproxEqAbs(IERC20Metadata(USDS).balanceOf(address(queue)) - balPreUSDS, usdsAmount, 1, 'queue USDS bal should be eq to the amount redeemed');
     assertEq(queue.epochPending(epoch), 0, 'epoch pending should be eq to 0');
   }
 
