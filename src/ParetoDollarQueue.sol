@@ -368,7 +368,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @dev only the manager can call this function. This should be used only when funds are received atomically
   /// so if yield source is a Credit Vault, this method should be called only when funds are ready to be claimed.
   /// For queueing Credit Vault withdraw requests, use the `callWhitelistedMethods` function directly.
-  /// Funds redeemed will be first used to fullfill pending requests for the epoch if any.
+  /// Funds redeemed will be first used to fulfill pending requests for the epoch if any.
   /// @param _sources Addresses of the yield sources.
   /// @param _methods Methods to call on yield sources.
   /// @param _args The arguments to pass to each the method.
@@ -419,7 +419,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
     // update pending withdrawals for the epoch
     if (totRedeemedScaled >= _epochPending) {
-      // if there are pending requests and funds to fullfill all   
+      // if there are pending requests and funds to fulfill all
       // requests then we update epochPending
       if (_epochPending > 0) {
         epochPending[_epoch] = 0;
@@ -599,18 +599,25 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
   /// @notice Remove yield source.
   /// @dev only the owner can call this function. Yield source should be 
-  /// removed only when everything is withdrawn from it.
+  /// removed only when everything is withdrawn from it. This is checked
+  /// using `depositedAmount` in the yield source struct, if the yield
+  /// source is not used with `depositFunds`/`redeemFunds` then this should
+  /// be manually checked
   /// @param _source The address of the yield source.
   function removeYieldSource(address _source) external {
     _checkOwner();
 
-    IERC20Metadata _token = yieldSources[_source].token;
+    YieldSource memory _ys = yieldSources[_source];
     // revert if the token is not in the yield sources
-    if (address(_token) == address(0)) {
+    if (address(_ys.token) == address(0)) {
       revert YieldSourceInvalid();
     }
+    // revert if the yield source is not empty
+    if (_ys.depositedAmount > 0) {
+      revert YieldSourceNotEmpty();
+    }
     // remove allowance for the yield source
-    _token.safeDecreaseAllowance(_source, _token.allowance(address(this), _source));
+    _ys.token.safeDecreaseAllowance(_source, _ys.token.allowance(address(this), _source));
     // remove the yield source from mapping
     delete yieldSources[_source];
     // remove the source from the list of all yield sources
@@ -618,7 +625,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     YieldSource[] memory _sources = allYieldSources;
     uint256 sourcesLen = _sources.length;
     for (uint256 i = 0; i < sourcesLen; i++) {
-      if (address(_sources[i].token) == address(_token)) {
+      if (address(_sources[i].token) == address(_ys.token)) {
         allYieldSources[i] = _sources[sourcesLen - 1];
         allYieldSources.pop();
         break;

@@ -262,6 +262,18 @@ contract TestParetoDollarQueue is Test, DeployScript {
     // check allowance
     assertEq(IERC20Metadata(USDC).allowance(address(queue), FAS_USDC_CV), 0, 'allowance should be removed');
     vm.stopPrank();
+
+    // Mint USP and deposit collateral in SUSDS
+    uint256 amount = 1e6;
+    _mintUSP(address(this), USDC, 1e6);
+    _sellUSDCPSM(1e6);
+    _deposit4626(SUSDS, amount * 1e12);
+
+    // try to remove SUSDS yield source
+    vm.startPrank(queue.owner());
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.YieldSourceNotEmpty.selector));
+    queue.removeYieldSource(SUSDS);
+    vm.stopPrank();
   }
 
   function testGetUnlentBalanceScaled() external {
