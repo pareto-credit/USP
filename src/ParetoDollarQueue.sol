@@ -520,15 +520,17 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
       emit YieldSourceDeposit(_sources[i], address(_yieldSource.token), deposited);
     }
 
-    // check if collaterals balances (scaled to 18 decimals) are greater than the totReservedWithdrawals
-    if (getUnlentBalanceScaled() < totReservedWithdrawals) {
+    uint256 _currEpoch = epochNumber;
+    // check if collaterals balances (scaled to 18 decimals) are greater than
+    // the totReservedWithdrawals minus the epochPending of the current epoch
+    if (getUnlentBalanceScaled() < totReservedWithdrawals - epochPending[_currEpoch]) {
       revert InsufficientBalance();
     }
 
-    // if collateral balances are greater than the totReservedWithdrawals
-    // it means that all epochPending requests of the prev epoch can be fulfilled 
-    // so we can reset the epochPending for the prev closed epoch
-    epochPending[epochNumber - 1] = 0;
+    // if collateral balances are greater than the totReservedWithdrawals - epochPending
+    // for the curr epoch it means that all epochPending requests of the prev epoch can
+    // be fulfilled so we can reset the epochPending for the prev closed epoch
+    epochPending[_currEpoch - 1] = 0;
   }
 
   /// @notice Call multiple whitelisted methods on yield sources.

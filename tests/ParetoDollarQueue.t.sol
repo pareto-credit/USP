@@ -393,6 +393,46 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.stopPrank();
   }
 
+  function testDepositFundsMultipleEpochs() external {
+    uint256 amount = 100e6;
+    address user1 = makeAddr('user1');
+    // mint USP
+    uint256 minted = _mintUSP(address(this), USDC, amount);
+    uint256 minted1 = _mintUSP(user1, USDC, amount);
+
+    // manager deposits collateral half of the total collateral in CV
+    _depositFundsCV(FAS_USDC_CV, amount);
+
+    // now 100 usdc are in queue contract and 100 in the CV
+
+    uint256 epoch = queue.epochNumber();
+    // request 50 USP redeem from address(this)
+    _requestRedeemUSP(address(this), minted / 2);
+    assertEq(queue.epochPending(epoch), minted / 2, 'Epoch pending should be updated');
+    // manager stops queue epoch so redeems can be processed
+    _stopEpoch();
+
+    // request another redeem, 100 USP, from user1.
+    _requestRedeemUSP(user1, minted1);
+    assertEq(queue.epochPending(epoch + 1), minted1, 'Epoch 2 pending should be updated');
+    // Now there are 50 USP request for epoch 1
+    // 100 USP request for current epoch
+    // 100 USDC unlent
+
+    // manager can deposit only 50/100 USDS as 50 are reserved for epoch 1 while funds
+    // requested in current epoch are not blocked
+    uint256 usdsAmount = amount * 1e12; // 100 USDS
+    _sellUSDCPSM(amount); // convert USDC to USDS
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.InsufficientBalance.selector));
+    // deposit 50 USP + 1 wei (ie too much)
+    _deposit4626(SUSDS, usdsAmount / 2 + 1);
+
+    // deposit 50 USP
+    _deposit4626(SUSDS, usdsAmount / 2);
+    // when depositing funds requested in prev epoch are set aside and epoch pending set to 0
+    assertEq(queue.epochPending(epoch), 0, 'Epoch pending should be updated');
+  }
+
   function testRequestRedeem() external {
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.NotAllowed.selector));
     queue.requestRedeem(address(this), 1e6);
