@@ -128,6 +128,18 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
     super._withdraw(caller, receiver, _owner, assets, shares);
   }
 
+  /// @notice Get the amount of unvested rewards.
+  /// @return _unvested The amount of unvested rewards.
+  function _getUnvestedRewards() internal view returns (uint256 _unvested) {
+    uint256 _rewardsVesting = rewardsVesting;
+    uint256 _rewards = rewards;
+    uint256 _timeSinceLastDeposit = block.timestamp - rewardsLastDeposit;
+    // calculate unvested rewards
+    if (_timeSinceLastDeposit < _rewardsVesting) {
+      _unvested = _rewards - (_rewards * _timeSinceLastDeposit / _rewardsVesting);
+    }
+  }
+
   //////////////////////
   /// View functions ///
   //////////////////////
@@ -139,16 +151,8 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
 
   /// @dev See {IERC4626-totalAssets}. Interest is vested over a period of time and is not immediately claimable.
   function totalAssets() public view override returns (uint256) {
-    uint256 _rewardsVesting = rewardsVesting;
-    uint256 _rewards = rewards;
-    uint256 _timeSinceLastDeposit = block.timestamp - rewardsLastDeposit;
-    // calculate unvested rewards
-    uint256 unvestedRewards;
-    if (_timeSinceLastDeposit < _rewardsVesting) {
-      unvestedRewards = _rewards - (_rewards * _timeSinceLastDeposit / _rewardsVesting);
-    }
     // return total assets minus unvested rewards
-    return IERC20(asset()).balanceOf(address(this)) - unvestedRewards;
+    return super.totalAssets() - _getUnvestedRewards();
   }
 
   ///////////////////////
@@ -180,14 +184,16 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   }
 
   /// @notice Deposit rewards (ParetoDollars) to the contract.
+  /// @dev Any unvested rewards will be added to the new rewards.
   /// @param amount The amount of rewards to deposit.
   function depositRewards(uint256 amount) external {
-    // check that caller is queue contract and that old rewards are all vested
-    if (msg.sender != queue || block.timestamp < rewardsLastDeposit + rewardsVesting) {
+    // check that caller is queue contract
+    if (msg.sender != queue) {
       revert NotAllowed();
     }
+    IERC20 _asset = IERC20(asset());
     // transfer rewards from caller to this contract
-    IERC20(asset()).safeTransferFrom(msg.sender, address(this), amount);
+    _asset.safeTransferFrom(msg.sender, address(this), amount);
 
     uint256 _fee = fee;
     uint256 _feeAmount;
@@ -195,11 +201,11 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
       // transfer fees to fee receiver
       // if funds are donated to the contract with direct transfer, fees won't be accounted on the donated amount
       _feeAmount = amount * _fee / FEE_100;
-      IERC20(asset()).safeTransfer(feeReceiver, _feeAmount); // use _feeAmount here
+      _asset.safeTransfer(feeReceiver, _feeAmount);
     }
 
-    // update rewards data
-    rewards = amount - _feeAmount;
+    // update rewards data, add unvested rewards if any
+    rewards = amount - _feeAmount + _getUnvestedRewards();
     rewardsLastDeposit = block.timestamp;
 
     emit RewardsDeposited(amount - _feeAmount);

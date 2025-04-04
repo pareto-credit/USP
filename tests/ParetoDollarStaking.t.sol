@@ -219,13 +219,16 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertApproxEqAbs(sPar.totalAssets(), depositAmount * 15 / 10, 1, 'Total assets have prev rewards partially vested');
 
     // we deposit again before the end of the vesting period
-    vm.startPrank(address(queue));
-    vm.expectRevert(abi.encodeWithSelector(ParetoDollarStaking.NotAllowed.selector));
-    sPar.depositRewards(depositAmount);
-    vm.stopPrank();
+    depositRewards(depositAmount);
+    assertEq(sPar.rewards(), depositAmount + depositAmount / 2, 'Unvested rewards should be added to the new rewards');
+    assertEq(sPar.rewardsLastDeposit(), block.timestamp, 'RewardsLastDeposit should be updated');
 
     skip(sPar.rewardsVesting() / 2);
-    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 2, 1, 'Total assets have second tranche of rewards partially vested');
+    // totalAsset is initial deposit amount + rewards already vested (ie depositAmount * 15 / 10)
+    // plus rewards that are half vested (depositAmount / 2 + depositAmount) / 2
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 15 / 10 + (depositAmount / 2 + depositAmount) / 2, 1, 'Total assets have second tranche of rewards partially vested');
+    skip(sPar.rewardsVesting() / 2);
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 3, 1, 'Total assets have all rewards vested');
 
     // deposit rewards cannot be called by non managers
     vm.startPrank(address(this));
@@ -248,7 +251,7 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(par.balanceOf(feeReceiver), expectedFees, 'Fees should be transferred to feeReceiver');
 
     skip(sPar.rewardsVesting() + 1);
-    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 29 / 10, 1, 'Total assets have rewards vested minus fee');
+    assertApproxEqAbs(sPar.totalAssets(), depositAmount * 39 / 10, 1, 'Total assets have rewards vested minus fee');
   }
 
   function testUpdateRewardsVesting() external {
