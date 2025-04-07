@@ -363,6 +363,28 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.stopPrank();
   }
 
+  function testUnlimitedMaxCap() external {
+    // deposit 100 USDC in the vault
+    uint256 amount = 100_000_001e6;
+    _mintUSP(address(this), USDC, amount);
+
+    // set maxCap to 0 which means unlimited
+    vm.startPrank(queue.owner());
+    queue.removeYieldSource(FAS_USDC_CV);
+     // add fasanara yield source
+    bytes4[] memory allowedMethods = new bytes4[](4);
+    allowedMethods[0] = DEPOSIT_AA_SIG;
+    allowedMethods[1] = WITHDRAW_AA_SIG;
+    allowedMethods[2] = CLAIM_REQ_SIG;
+    allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
+    uint256 maxCap = 0; // unlimited
+    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, maxCap, allowedMethods, 1);
+    vm.stopPrank();
+
+    _depositFundsCV(FAS_USDC_CV, amount);
+    assertGt(IERC20Metadata(AA_FAS_USDC_CV).balanceOf(address(queue)), 0, 'vault balance should be > 0');
+  }
+
   function testDepositFundsMultipleVaults() external {
     // deposit 200 USDC in the vault
     uint256 amount = 100e6;

@@ -511,7 +511,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
       deposited = balPre - _yieldSource.token.balanceOf(address(this));
       _yieldSource.depositedAmount += deposited;
       // revert if the amount is greater than the max cap
-      if (_yieldSource.depositedAmount > _yieldSource.maxCap) {
+      if (_yieldSource.maxCap > 0 && _yieldSource.depositedAmount > _yieldSource.maxCap) {
         revert MaxCap();
       }
       // save the depositedAmount in storage
