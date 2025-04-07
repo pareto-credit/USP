@@ -332,7 +332,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     queue.depositFunds(sources, methods, args);
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
-    assertEq(source.depositedAmount, amount, 'vault deposited amount is wrong');
+    assertApproxEqAbs(source.depositedAmount, amount, 1, 'vault deposited amount is wrong');
     assertGt(IERC20Metadata(source.vaultToken).balanceOf(address(queue)), 0, 'vault balance should be greater than 0');
     assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), balPre - amount, 'queue token balance should be updated');
     vm.stopPrank();
@@ -418,8 +418,8 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
     ParetoDollarQueue.YieldSource memory sourceSUSDS = queue.getYieldSource(SUSDS);
-    assertEq(source.depositedAmount, amount, 'vault deposited amount is wrong');
-    assertEq(sourceSUSDS.depositedAmount, usdsAmount, 'vault deposited amount for SUSDS is wrong');
+    assertApproxEqAbs(source.depositedAmount, amount, 1, 'vault deposited amount is wrong');
+    assertApproxEqAbs(sourceSUSDS.depositedAmount, usdsAmount, 1, 'vault deposited amount for SUSDS is wrong');
     assertGt(IERC20Metadata(source.vaultToken).balanceOf(address(queue)), 0, 'vault balance should be greater than 0');
     assertGt(IERC20Metadata(sourceSUSDS.vaultToken).balanceOf(address(queue)), 0, 'vault balance of USDS should be greater than 0');
     assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), balPre - amount, 'queue token balance should be updated');

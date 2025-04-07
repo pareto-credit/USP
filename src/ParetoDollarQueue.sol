@@ -150,19 +150,25 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     }
 
     uint256 sourcesLen = allYieldSources.length;
-    YieldSource memory src;
     // loop through all yield sources
     for (uint256 i = 0; i < sourcesLen; i++) {
-      src = allYieldSources[i];
-      if (src.vaultType == 1) {
-        // Pareto Credit Vault
-        totCollaterals += scaledNAVCreditVault(src.source, src.vaultToken, src.token);
-      } else if (src.vaultType == 2) {
-        // ERC4626 vault
-        totCollaterals += scaledNAVERC4626(IERC4626(src.vaultToken));
-      }
-      // if vaultType is not one supported we skip it and add 0 to totCollaterals
+      totCollaterals += getCollateralsYieldSourceScaled(allYieldSources[i].source);
     }
+  }
+
+  /// @notice Get the total value of collaterals in a yield source.
+  /// @param _source The address of the yield source.
+  /// @return assets The total value of collaterals in the yield source.
+  function getCollateralsYieldSourceScaled(address _source) public view returns (uint256 assets) {
+    YieldSource memory src = yieldSources[_source];
+      if (src.vaultType == 1) {
+      // Pareto Credit Vault
+      assets = scaledNAVCreditVault(src.source, src.vaultToken, src.token);
+    } else if (src.vaultType == 2) {
+      // ERC4626 vault
+      assets = scaledNAVERC4626(IERC4626(src.vaultToken));
+    }
+    // if vaultType is not one supported we skip it and return 0
   }
 
   /// @notice Get the total value in this contract (scaled to 18 decimals) of a Pareto Credit Vault.
@@ -408,7 +414,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
       // calculate redeemed amount
       redeemed = _yieldSource.token.balanceOf(address(this)) - balPre;
       // update the depositedAmount in storage
-      yieldSources[source].depositedAmount -= redeemed > _yieldSource.depositedAmount ? _yieldSource.depositedAmount : redeemed;
+      yieldSources[source].depositedAmount = getCollateralsYieldSourceScaled(source) / (10 ** (18 - _yieldSource.token.decimals()));
       if (redeemed > 0) {
         if (_epochPending > 0) {
           totRedeemedScaled += redeemed * (10 ** (18 - _yieldSource.token.decimals()));
@@ -497,6 +503,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     YieldSource memory _yieldSource;
     uint256 balPre;
     uint256 deposited;
+    uint256 totDeposited;
     // loop through the vaults and deposit funds
     for (uint256 i = 0; i < _vaultsLen; i++) {
       _yieldSource = yieldSources[_sources[i]];
@@ -509,13 +516,13 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
       // calculate deposited amount
       deposited = balPre - _yieldSource.token.balanceOf(address(this));
-      _yieldSource.depositedAmount += deposited;
+      totDeposited = getCollateralsYieldSourceScaled(_sources[i]) / (10 ** (18 - _yieldSource.token.decimals()));
       // revert if the amount is greater than the max cap
-      if (_yieldSource.maxCap > 0 && _yieldSource.depositedAmount > _yieldSource.maxCap) {
+      if (_yieldSource.maxCap > 0 && totDeposited > _yieldSource.maxCap) {
         revert MaxCap();
       }
       // save the depositedAmount in storage
-      yieldSources[_sources[i]].depositedAmount = _yieldSource.depositedAmount;
+      yieldSources[_sources[i]].depositedAmount = totDeposited;
 
       emit YieldSourceDeposit(_sources[i], address(_yieldSource.token), deposited);
     }
@@ -612,8 +619,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     if (address(_ys.token) == address(0)) {
       revert YieldSourceInvalid();
     }
-    // revert if the yield source is not empty
-    if (_ys.depositedAmount > 0) {
+    // revert if the yield source is not empty, no need to unscale the value
+    if (getCollateralsYieldSourceScaled(_source) > 0) {
       revert YieldSourceNotEmpty();
     }
     // remove allowance for the yield source
