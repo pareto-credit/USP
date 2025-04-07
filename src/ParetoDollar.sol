@@ -161,35 +161,17 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     if (!info.allowed) {
       revert CollateralNotAllowed();
     }
-    price = _getOraclePrice(
-      info.priceFeed,
-      info.priceFeedDecimals,
-      info.fallbackPriceFeed,
-      info.fallbackPriceFeedDecimals
-    );
+    price = _getOraclePrice(info.priceFeed, info.priceFeedDecimals);
   }
 
   /// @notice Retrieves the oracle price for collateral and normalizes it to 18 decimals.
-  /// @param primaryOracle The primary oracle address.
-  /// @param primaryDecimals The decimals for the primary oracle.
-  /// @param fallbackOracle The fallback oracle address.
-  /// @param fallbackDecimals The decimals for the fallback oracle.
+  /// @param oracle The primary oracle address.
+  /// @param oracleDecimals The decimals for the primary oracle.
   /// @return price The normalized price (18 decimals).
-  function _getOraclePrice(
-    address primaryOracle,
-    uint8 primaryDecimals,
-    address fallbackOracle,
-    uint8 fallbackDecimals
-  ) internal view returns (uint256 price) {
-    price = _getScaledOracleAnswer(primaryOracle, primaryDecimals);
+  function _getOraclePrice(address oracle, uint8 oracleDecimals) internal view returns (uint256 price) {
+    price = _getScaledOracleAnswer(oracle, oracleDecimals);
     if (price > 0) {
       return price;
-    }
-    if (fallbackOracle != address(0)) {
-      price = _getScaledOracleAnswer(fallbackOracle, fallbackDecimals);
-      if (price > 0) {
-        return price;
-      }
     }
     revert InvalidOraclePrice();
   }
@@ -248,15 +230,11 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// @param tokenDecimals The decimals for the collateral token.
   /// @param priceFeed The primary oracle address.
   /// @param priceFeedDecimals The decimals for the primary oracle.
-  /// @param fallbackPriceFeed The fallback oracle address (can be address(0) if not used).
-  /// @param fallbackPriceFeedDecimals The decimals for the fallback oracle.
   function addCollateral(
     address token,
     uint8 tokenDecimals,
     address priceFeed,
-    uint8 priceFeedDecimals,
-    address fallbackPriceFeed,
-    uint8 fallbackPriceFeedDecimals
+    uint8 priceFeedDecimals
   ) external {
     _checkOwner();
 
@@ -266,16 +244,14 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     collateralInfo[token] = CollateralInfo({
       allowed: true,
       priceFeed: priceFeed,
-      fallbackPriceFeed: fallbackPriceFeed,
       tokenDecimals: tokenDecimals,
-      priceFeedDecimals: priceFeedDecimals,
-      fallbackPriceFeedDecimals: fallbackPriceFeedDecimals
+      priceFeedDecimals: priceFeedDecimals
     });
     // add the token to the list of collaterals
     if (!isOverwriting) {
       collaterals.push(token);
     }
-    emit CollateralAdded(token, priceFeed, fallbackPriceFeed, tokenDecimals, priceFeedDecimals, fallbackPriceFeedDecimals);
+    emit CollateralAdded(token, priceFeed, tokenDecimals, priceFeedDecimals);
   }
 
   /// @notice Remove collateral

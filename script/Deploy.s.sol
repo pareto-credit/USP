@@ -109,9 +109,7 @@ contract DeployScript is Script, Constants {
       USDC,
       IERC20Metadata(USDC).decimals(),
       USDC_FEED,
-      USDC_FEED_DECIMALS,
-      USDC_FALLBACK_FEED,
-      USDC_FALLBACK_FEED_DECIMALS
+      USDC_FEED_DECIMALS
     );
 
     // Add USDT collateral
@@ -119,9 +117,7 @@ contract DeployScript is Script, Constants {
       USDT,
       IERC20Metadata(USDT).decimals(),
       USDT_FEED,
-      USDT_FEED_DECIMALS,
-      USDT_FALLBACK_FEED,
-      USDT_FALLBACK_FEED_DECIMALS
+      USDT_FEED_DECIMALS
     );
 
     // Add USDS collateral
@@ -129,9 +125,7 @@ contract DeployScript is Script, Constants {
       USDS,
       IERC20Metadata(USDS).decimals(),
       USDS_FEED,
-      USDS_FEED_DECIMALS,
-      USDS_FALLBACK_FEED,
-      USDS_FALLBACK_FEED_DECIMALS
+      USDS_FEED_DECIMALS
     );
 
     // transfer ownership of ParetoDollar to TL_MULTISIG

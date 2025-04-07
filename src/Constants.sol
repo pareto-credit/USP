@@ -14,20 +14,14 @@ contract Constants {
   address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
   address public constant USDC_FEED = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
   uint8 public constant USDC_FEED_DECIMALS = 8;
-  address public constant USDC_FALLBACK_FEED = address(0);
-  uint8 public constant USDC_FALLBACK_FEED_DECIMALS = 0;
   // USDT feed data
   address public constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
   address public constant USDT_FEED = 0x3E7d1eAB13ad0104d2750B8863b489D65364e32D;
   uint8 public constant USDT_FEED_DECIMALS = 8;
-  address public constant USDT_FALLBACK_FEED = address(0);
-  uint8 public constant USDT_FALLBACK_FEED_DECIMALS = 0;
   // USDS feed data
   address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
   address public constant USDS_FEED = 0xfF30586cD0F29eD462364C7e81375FC0C71219b1;
   uint8 public constant USDS_FEED_DECIMALS = 8;
-  address public constant USDS_FALLBACK_FEED = address(0);
-  uint8 public constant USDS_FALLBACK_FEED_DECIMALS = 0;
   // Fas USDT credit vault
   address public constant FAS_USDC_CV = 0xf6223C567F21E33e859ED7A045773526E9E3c2D5;
   address public constant AA_FAS_USDC_CV = 0x45054c6753b4Bce40C5d54418DabC20b070F85bE;

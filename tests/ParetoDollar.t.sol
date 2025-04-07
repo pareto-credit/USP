@@ -56,20 +56,16 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(par.collaterals(0), USDC, 'First collateral should be USDC');
     assertEq(usdcCollateral.allowed, true, 'USDC collateral should be allowed');
     assertEq(usdcCollateral.priceFeed, USDC_FEED, 'USDC priceFeed should be set');
-    assertEq(usdcCollateral.fallbackPriceFeed, USDC_FALLBACK_FEED, 'USDC fallbackPriceFeed should be set');
     assertEq(usdcCollateral.tokenDecimals, 6, 'USDC should have 6 decimals');
     assertEq(usdcCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDC should have 8 decimals');
-    assertEq(usdcCollateral.fallbackPriceFeedDecimals, USDT_FALLBACK_FEED_DECIMALS, 'Fallback price feed for USDC should have 8 decimals');
   
     IParetoDollar.CollateralInfo memory usdtCollateral = par.getCollateralInfo(USDT);
 
     assertEq(par.collaterals(1), USDT, 'Second collateral should be USDT');
     assertEq(usdtCollateral.allowed, true, 'USDT collateral should be allowed');
     assertEq(usdtCollateral.priceFeed, USDT_FEED, 'USDT priceFeed should be set');
-    assertEq(usdtCollateral.fallbackPriceFeed, USDT_FALLBACK_FEED, 'USDT fallbackPriceFeed should be set');
     assertEq(usdtCollateral.tokenDecimals, 6, 'USDT should have 6 decimals');
     assertEq(usdtCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDT should have 8 decimals');
-    assertEq(usdtCollateral.fallbackPriceFeedDecimals, USDT_FALLBACK_FEED_DECIMALS, 'Fallback price feed for USDT should have 8 decimals');
 
     address[] memory collaterals = par.getCollaterals();
     assertEq(collaterals.length, 3, 'There should be 2 collaterals');
@@ -80,43 +76,39 @@ contract TestParetoDollar is Test, DeployScript {
 
   function testAddCollateral() external {
     vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
-    par.addCollateral(USDT, 6, address(1), 8, address(1), 8);
+    par.addCollateral(USDT, 6, address(1), 8);
 
     vm.startPrank(par.owner());
     // revert if token is address(0)
     vm.expectRevert(IParetoDollar.InvalidData.selector);
-    par.addCollateral(address(0), 6, address(1), 8, address(1), 8);
+    par.addCollateral(address(0), 6, address(1), 8);
     
     // revert if priceFeed is address(0)
     vm.expectRevert(IParetoDollar.InvalidData.selector);
-    par.addCollateral(USDT, 6, address(0), 8, address(1), 8);
+    par.addCollateral(USDT, 6, address(0), 8);
 
     vm.expectEmit(true, true, true, true);
-    emit IParetoDollar.CollateralAdded(address(1), address(2), address(3), 6, 8, 10);
-    par.addCollateral(address(1), 6, address(2), 8, address(3), 10);
+    emit IParetoDollar.CollateralAdded(address(1), address(2), 6, 8);
+    par.addCollateral(address(1), 6, address(2), 8);
     IParetoDollar.CollateralInfo memory newCollateral = par.getCollateralInfo(address(1));
 
     assertEq(newCollateral.allowed, true, 'new collateral should be allowed');
     assertEq(newCollateral.priceFeed, address(2), 'new priceFeed should be set');
-    assertEq(newCollateral.fallbackPriceFeed, address(3), 'new fallbackPriceFeed should be set');
     assertEq(newCollateral.tokenDecimals, 6, 'new should have 6 decimals');
     assertEq(newCollateral.priceFeedDecimals, 8, 'Price feed for USDT should have 8 decimals');
-    assertEq(newCollateral.fallbackPriceFeedDecimals, 10, 'Fallback price feed for USDT should have 8 decimals');
 
     address[] memory collaterals = par.getCollaterals();
     assertEq(collaterals.length, 4, 'There should be 4 collaterals');
     assertEq(collaterals[3], address(1), 'New collateral address in getCollaterals should be address(1)');
 
     // overwrite collateral
-    par.addCollateral(address(1), 66, address(22), 88, address(33), 11);
+    par.addCollateral(address(1), 66, address(22), 88);
     IParetoDollar.CollateralInfo memory newCollateral2 = par.getCollateralInfo(address(1));
     assertEq(newCollateral2.allowed, true, 'new collateral should be allowed');
     assertEq(newCollateral2.priceFeed, address(22), 'new priceFeed should be set');
-    assertEq(newCollateral2.fallbackPriceFeed, address(33), 'new fallbackPriceFeed should be set');
     assertEq(newCollateral2.tokenDecimals, 66, 'new should have 6 decimals');
     assertEq(newCollateral2.priceFeedDecimals, 88, 'Price feed for USDT should have 8 decimals');
-    assertEq(newCollateral2.fallbackPriceFeedDecimals, 11, 'Fallback price feed for USDT should have 8 decimals');
-    assertEq(par.getCollaterals().length, 4, 'Collaterals lenght should not change');
+    assertEq(par.getCollaterals().length, 4, 'Collaterals length should not change');
     vm.stopPrank();
   }
 
@@ -132,10 +124,8 @@ contract TestParetoDollar is Test, DeployScript {
     IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     assertEq(usdcCollateral.allowed, false, 'USDC should not be allowed');
     assertEq(usdcCollateral.priceFeed, address(0), 'USDC feed should not be removed');
-    assertEq(usdcCollateral.fallbackPriceFeed, address(0), 'USDC fallback feed should not be removed');
     assertEq(usdcCollateral.tokenDecimals, 0, 'USDC tokenDecimals should not be removed');
     assertEq(usdcCollateral.priceFeedDecimals, 0, 'USDC priceFeedDecimals should not be removed');
-    assertEq(usdcCollateral.fallbackPriceFeedDecimals, 0, 'USDC fallbackPriceFeedDecimals should not be removed');
 
     vm.expectRevert(IParetoDollar.InvalidData.selector);
     par.removeCollateral(address(0));

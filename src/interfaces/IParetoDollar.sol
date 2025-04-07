@@ -12,10 +12,8 @@ interface IParetoDollar {
   event CollateralAdded(
     address indexed token,
     address priceFeed,
-    address fallbackPriceFeed,
     uint8 tokenDecimals,
-    uint8 priceFeedDecimals,
-    uint8 fallbackPriceFeedDecimals
+    uint8 priceFeedDecimals
   );
   event CollateralRemoved(address indexed token);
   event Minted(address indexed user, address indexed collateralToken, uint256 collateralAmount, uint256 uspminted);
@@ -26,10 +24,8 @@ interface IParetoDollar {
   struct CollateralInfo {
     bool allowed;
     address priceFeed;               // Primary oracle address
-    address fallbackPriceFeed;       // Optional fallback oracle address
     uint8 tokenDecimals;             // Collateral token decimals (e.g., 6 for USDC, 18 for DAI)
     uint8 priceFeedDecimals;         // Primary oracle decimals (e.g., 8 for many Chainlink feeds)
-    uint8 fallbackPriceFeedDecimals; // Fallback oracle decimals
   }
 
   function getCollateralInfo(address collateralToken) external view returns (CollateralInfo memory);
