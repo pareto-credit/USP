@@ -51,8 +51,6 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   uint256 public constant FEE_100 = 100_000; // 100% fee
   /// @notice max fee
   uint256 public constant MAX_FEE = 20_000; // max fee is 20%
-  /// @notice role for managing the contract (can deposit rewards)
-  bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
   /////////////////////////
   /// Storage variables ///
@@ -84,24 +82,16 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   /// @param _paretoDollar The address of the ParetoDollar contract.
   /// @param _admin The address of the admin.
   /// @param _pauser The address of the pauser.
-  /// @param _managers The addresses of the managers.
   /// @param _queue The address of the ParetoDollarQueue contract.
   function initialize(
     address _paretoDollar,
     address _admin,
     address _pauser,
-    address[] memory _managers,
     address _queue
   ) public initializer {
     __ERC20_init(NAME, SYMBOL);
     __ERC4626_init(IERC20(_paretoDollar));
     __EmergencyUtils_init(_admin, _admin, _pauser);
-
-    // manage roles
-    _grantRole(MANAGER_ROLE, _admin);
-    for (uint256 i = 0; i < _managers.length; i++) {
-      _grantRole(MANAGER_ROLE, _managers[i]);
-    }
 
     // set initial values
     rewardsVesting = 7 days;

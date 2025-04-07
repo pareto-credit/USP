@@ -55,7 +55,6 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(sPar.hasRole(sPar.DEFAULT_ADMIN_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have DEFAULT_ADMIN_ROLE');
     assertEq(sPar.hasRole(sPar.PAUSER_ROLE(), HYPERNATIVE_PAUSER), true, 'HYPERNATIVE_PAUSER should have PAUSER_ROLE');
     assertEq(sPar.hasRole(sPar.PAUSER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have PAUSER_ROLE');
-    assertEq(sPar.hasRole(sPar.MANAGER_ROLE(), TL_MULTISIG), true, 'TL_MULTISIG should have MANAGER_ROLE');
     assertEq(sPar.isPausable(), true, 'the contract should be pausable');
   }
 
@@ -93,7 +92,6 @@ contract TestParetoDollarStaking is Test, DeployScript {
   }
 
   function testRoles() external {
-    bytes32 manager = sPar.MANAGER_ROLE();
     bytes32 pauser = sPar.PAUSER_ROLE();
     bytes32 defaultAdmin = sPar.DEFAULT_ADMIN_ROLE();
 
@@ -101,15 +99,11 @@ contract TestParetoDollarStaking is Test, DeployScript {
 
     // if non admin tries to grant role, it reverts
     vm.expectRevert(defaultError);
-    sPar.grantRole(manager, address(this));
-    vm.expectRevert(defaultError);
     sPar.grantRole(pauser, address(this));
     vm.expectRevert(defaultError);
     sPar.grantRole(defaultAdmin, address(this));
 
     // if non admin tries to removke role, it reverts
-    vm.expectRevert(defaultError);
-    sPar.revokeRole(manager, address(this));
     vm.expectRevert(defaultError);
     sPar.revokeRole(pauser, address(this));
     vm.expectRevert(defaultError);
@@ -118,20 +112,16 @@ contract TestParetoDollarStaking is Test, DeployScript {
     // admin can grant roles
     address admin = TL_MULTISIG;
     vm.startPrank(admin);
-    sPar.grantRole(manager, address(this));
     sPar.grantRole(pauser, address(this));
     sPar.grantRole(defaultAdmin, address(this));
-    assertEq(sPar.hasRole(manager, address(this)), true, 'address(this) should have MANAGER_ROLE');
     assertEq(sPar.hasRole(pauser, address(this)), true, 'address(this) should have PAUSER_ROLE');
     assertEq(sPar.hasRole(defaultAdmin, address(this)), true, 'address(this) should have DEFAULT_ADMIN_ROLE');
     vm.stopPrank();
 
     // admin can revoke roles
     vm.startPrank(admin);
-    sPar.revokeRole(manager, address(this));
     sPar.revokeRole(pauser, address(this));
     sPar.revokeRole(defaultAdmin, address(this));
-    assertEq(sPar.hasRole(manager, address(this)), false, 'address(this) should not have MANAGER_ROLE');
     assertEq(sPar.hasRole(pauser, address(this)), false, 'address(this) should not have PAUSER_ROLE');
     assertEq(sPar.hasRole(defaultAdmin, address(this)), false, 'address(this) should not have DEFAULT_ADMIN_ROLE');
     vm.stopPrank();

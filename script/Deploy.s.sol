@@ -62,8 +62,6 @@ contract DeployScript is Script, Constants {
     ));
 
     // Deploy ParetoDollarStaking with transparent proxy
-    address[] memory managers = new address[](1);
-    managers[0] = TL_MULTISIG;
     sPar = ParetoDollarStaking(Upgrades.deployTransparentProxy(
       "ParetoDollarStaking.sol",
       TL_MULTISIG,
@@ -72,7 +70,6 @@ contract DeployScript is Script, Constants {
           address(par),
           TL_MULTISIG,
           HYPERNATIVE_PAUSER,
-          managers,
           address(queue)
         )
       )
