@@ -142,7 +142,12 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   /// @dev See {IERC4626-totalAssets}. Interest is vested over a period of time and is not immediately claimable.
   function totalAssets() public view override returns (uint256) {
     // return total assets minus unvested rewards
-    return super.totalAssets() - _getUnvestedRewards();
+    uint256 _totAssets = super.totalAssets();
+    uint256 _unvested = _getUnvestedRewards();
+    if (_unvested > _totAssets) {
+      return 0;
+    }
+    return _totAssets - _unvested;
   }
 
   ///////////////////////
