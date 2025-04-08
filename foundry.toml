@@ -22,7 +22,6 @@
 
 [profile.lite]
   optimizer = false
-  viaIR = false
 
 [profile.ci]
   fuzz = { runs = 10_000 }

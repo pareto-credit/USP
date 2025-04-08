@@ -7,7 +7,7 @@ import { Upgrades } from "@openzeppelin/foundry-upgrades/Upgrades.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { ParetoDollar } from "../src/ParetoDollar.sol";
 import { ParetoDollarStaking } from "../src/ParetoDollarStaking.sol";
-import { ParetoDollarQueue } from "../src/ParetoDollarQueue.sol";
+import { ParetoDollarQueue, IParetoDollarQueue } from "../src/ParetoDollarQueue.sol";
 import { Constants } from "../src/Constants.sol";
 
 contract DeployScript is Script, Constants {
@@ -76,19 +76,19 @@ contract DeployScript is Script, Constants {
     ));
 
     // add fasanara yield source
-    bytes4[] memory allowedMethods = new bytes4[](4);
-    allowedMethods[0] = DEPOSIT_AA_SIG;
-    allowedMethods[1] = WITHDRAW_AA_SIG;
-    allowedMethods[2] = CLAIM_REQ_SIG;
-    allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
+    IParetoDollarQueue.Method[] memory allowedMethods = new IParetoDollarQueue.Method[](4);
+    allowedMethods[0] = IParetoDollarQueue.Method(DEPOSIT_AA_SIG, 0);
+    allowedMethods[1] = IParetoDollarQueue.Method(WITHDRAW_AA_SIG, 1); // this will *request* a redeem
+    allowedMethods[2] = IParetoDollarQueue.Method(CLAIM_REQ_SIG, 2);
+    allowedMethods[3] = IParetoDollarQueue.Method(CLAIM_INSTANT_REQ_SIG, 2);
     uint256 maxCap = 100_000_000 * 1e6; // 100M USDC
     queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, maxCap, allowedMethods, 1);
 
     // add sky.money sUSDS yield source
-    allowedMethods = new bytes4[](3);
-    allowedMethods[0] = DEPOSIT_4626_SIG;
-    allowedMethods[1] = WITHDRAW_4626_SIG;
-    allowedMethods[2] = REDEEM_4626_SIG;
+    allowedMethods = new IParetoDollarQueue.Method[](3);
+    allowedMethods[0] = IParetoDollarQueue.Method(DEPOSIT_4626_SIG, 0);
+    allowedMethods[1] = IParetoDollarQueue.Method(WITHDRAW_4626_SIG, 2);
+    allowedMethods[2] = IParetoDollarQueue.Method(REDEEM_4626_SIG, 2);
     maxCap = 100_000_000 * 1e18; // 100M USDS
     queue.addYieldSource(SUSDS, USDS, SUSDS, maxCap, allowedMethods, 2);
 
@@ -96,9 +96,9 @@ contract DeployScript is Script, Constants {
     // we are approving only USDS to be swapped for USDC when calling `addYieldSource` the opposite is done 
     // directly in the `initialize`
     // "Gem" is USDC here
-    allowedMethods = new bytes4[](2);
-    allowedMethods[0] = BUY_GEM_SIG;
-    allowedMethods[1] = SELL_GEM_SIG;
+    allowedMethods = new IParetoDollarQueue.Method[](2);
+    allowedMethods[0] = IParetoDollarQueue.Method(BUY_GEM_SIG, 1);
+    allowedMethods[1] = IParetoDollarQueue.Method(SELL_GEM_SIG, 1);
     queue.addYieldSource(USDS_USDC_PSM, USDC, USDS, 0, allowedMethods, 0);
 
     // Set keyring params

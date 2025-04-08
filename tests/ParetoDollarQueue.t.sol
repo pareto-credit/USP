@@ -75,10 +75,14 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultType, 1, 'vault type deposited amount is wrong');
     assertEq(source.allowedMethods.length, 4, 'vault allowed methods is wrong');
-    assertEq(source.allowedMethods[0], DEPOSIT_AA_SIG, 'first allowed method is wrong');
-    assertEq(source.allowedMethods[1], WITHDRAW_AA_SIG, 'second allowed method is wrong');
-    assertEq(source.allowedMethods[2], CLAIM_REQ_SIG, 'third allowed method is wrong');
-    assertEq(source.allowedMethods[3], CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
+    assertEq(source.allowedMethods[0].method, DEPOSIT_AA_SIG, 'first allowed method is wrong');
+    assertEq(source.allowedMethods[0].methodType, 0, 'first allowed method type is wrong');
+    assertEq(source.allowedMethods[1].method, WITHDRAW_AA_SIG, 'second allowed method is wrong');
+    assertEq(source.allowedMethods[1].methodType, 1, 'second allowed method type is wrong');
+    assertEq(source.allowedMethods[2].method, CLAIM_REQ_SIG, 'third allowed method is wrong');
+    assertEq(source.allowedMethods[2].methodType, 2, 'third allowed method type is wrong');
+    assertEq(source.allowedMethods[3].method, CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
+    assertEq(source.allowedMethods[3].methodType, 2, 'fourth allowed method type is wrong');
 
     ParetoDollarQueue.YieldSource memory sourceUSDS = queue.getYieldSource(SUSDS);
     assertEq(address(sourceUSDS.token), USDS, 'token for USDS source is wrong');
@@ -88,9 +92,12 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(sourceUSDS.depositedAmount, 0, 'vault deposited amount for USDS source is wrong');
     assertEq(sourceUSDS.vaultType, 2, 'vault type for USDS source deposited amount is wrong');
     assertEq(sourceUSDS.allowedMethods.length, 3, 'vault allowed methods for USDS source is wrong');
-    assertEq(sourceUSDS.allowedMethods[0], DEPOSIT_4626_SIG, 'first allowed method for USDS source is wrong');
-    assertEq(sourceUSDS.allowedMethods[1], WITHDRAW_4626_SIG, 'second allowed method for USDS source is wrong');
-    assertEq(sourceUSDS.allowedMethods[2], REDEEM_4626_SIG, 'third allowed method for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[0].method, DEPOSIT_4626_SIG, 'first allowed method for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[0].methodType, 0, 'first allowed method type for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[1].method, WITHDRAW_4626_SIG, 'second allowed method for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[1].methodType, 2, 'second allowed method type for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[2].method, REDEEM_4626_SIG, 'third allowed method for USDS source is wrong');
+    assertEq(sourceUSDS.allowedMethods[2].methodType, 2, 'third allowed method type for USDS source is wrong');
 
     ParetoDollarQueue.YieldSource memory sourcePSM = queue.getYieldSource(USDS_USDC_PSM);
     assertEq(address(sourcePSM.token), USDC, 'token for USDS PSM source is wrong');
@@ -100,8 +107,10 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(sourcePSM.depositedAmount, 0, 'vault deposited amount for USDS PSM source is wrong');
     assertEq(sourcePSM.vaultType, 0, 'vault type for USDS PSM source deposited amount is wrong');
     assertEq(sourcePSM.allowedMethods.length, 2, 'vault allowed methods for USDS PSM source is wrong');
-    assertEq(sourcePSM.allowedMethods[0], BUY_GEM_SIG, 'first allowed method for USDS PSM source is wrong');
-    assertEq(sourcePSM.allowedMethods[1], SELL_GEM_SIG, 'second allowed method for USDS PSM source is wrong');
+    assertEq(sourcePSM.allowedMethods[0].method, BUY_GEM_SIG, 'first allowed method for USDS PSM source is wrong');
+    assertEq(sourcePSM.allowedMethods[0].methodType, 1, 'first allowed method type for USDS PSM source is wrong');
+    assertEq(sourcePSM.allowedMethods[1].method, SELL_GEM_SIG, 'second allowed method for USDS PSM source is wrong');
+    assertEq(sourcePSM.allowedMethods[1].methodType, 1, 'second allowed method type for USDS PSM source is wrong');
   }
 
   function testEmergencyWithdraw() external {
@@ -201,19 +210,19 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
   function testAddYieldSource() external {
     vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
-    queue.addYieldSource(address(1), USDC, AA_FAS_USDC_CV, 0, new bytes4[](0), 0);
+    queue.addYieldSource(address(1), USDC, AA_FAS_USDC_CV, 0, new IParetoDollarQueue.Method[](0), 0);
 
     vm.startPrank(queue.owner());
     // revert for yield source already present
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.YieldSourceInvalid.selector));
-    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, 10, new bytes4[](0), 0);
+    queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, 10, new IParetoDollarQueue.Method[](0), 0);
 
     IIdleCDOEpochVariant cdo = IIdleCDOEpochVariant(0xdd4D030A4337CE492B55bc5169F6A9568242C0Bc);
-    bytes4[] memory allowedMethods = new bytes4[](4);
-    allowedMethods[0] = DEPOSIT_AA_SIG;
-    allowedMethods[1] = WITHDRAW_AA_SIG;
-    allowedMethods[2] = CLAIM_REQ_SIG;
-    allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
+    IParetoDollarQueue.Method[] memory allowedMethods = new IParetoDollarQueue.Method[](4);
+    allowedMethods[0] = IParetoDollarQueue.Method(DEPOSIT_AA_SIG, 0);
+    allowedMethods[1] = IParetoDollarQueue.Method(WITHDRAW_AA_SIG, 2);
+    allowedMethods[2] = IParetoDollarQueue.Method(CLAIM_REQ_SIG, 1);
+    allowedMethods[3] = IParetoDollarQueue.Method(CLAIM_INSTANT_REQ_SIG, 1);
     vm.expectEmit(true, true, true, true);
     emit IParetoDollarQueue.YieldSourceAdded(address(cdo), USDC);
     queue.addYieldSource(address(cdo), cdo.token(), cdo.AATranche(), 10, allowedMethods, 1);
@@ -224,10 +233,14 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(source.vaultToken, cdo.AATranche(), 'vault token is wrong');
     assertEq(source.vaultType, 1, 'vault typer is wrong');
     assertEq(source.allowedMethods.length, 4, 'vault allowed methods is wrong');
-    assertEq(source.allowedMethods[0], DEPOSIT_AA_SIG, 'first allowed method is wrong');
-    assertEq(source.allowedMethods[1], WITHDRAW_AA_SIG, 'second allowed method is wrong');
-    assertEq(source.allowedMethods[2], CLAIM_REQ_SIG, 'third allowed method is wrong');
-    assertEq(source.allowedMethods[3], CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
+    assertEq(source.allowedMethods[0].method, DEPOSIT_AA_SIG, 'first allowed method is wrong');
+    assertEq(source.allowedMethods[0].methodType, 0, 'first allowed method type is wrong');
+    assertEq(source.allowedMethods[1].method, WITHDRAW_AA_SIG, 'second allowed method is wrong');
+    assertEq(source.allowedMethods[1].methodType, 2, 'second allowed method type is wrong');
+    assertEq(source.allowedMethods[2].method, CLAIM_REQ_SIG, 'third allowed method is wrong');
+    assertEq(source.allowedMethods[2].methodType, 1, 'third allowed method type is wrong');
+    assertEq(source.allowedMethods[3].method, CLAIM_INSTANT_REQ_SIG, 'fourth allowed method is wrong');
+    assertEq(source.allowedMethods[3].methodType, 1, 'fourth allowed method type is wrong');
 
     // one source was added at deployment and another one in this test
     assertEq(queue.getAllYieldSources().length, 4, 'there should be 4 yield sources');
@@ -372,11 +385,11 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.startPrank(queue.owner());
     queue.removeYieldSource(FAS_USDC_CV);
      // add fasanara yield source
-    bytes4[] memory allowedMethods = new bytes4[](4);
-    allowedMethods[0] = DEPOSIT_AA_SIG;
-    allowedMethods[1] = WITHDRAW_AA_SIG;
-    allowedMethods[2] = CLAIM_REQ_SIG;
-    allowedMethods[3] = CLAIM_INSTANT_REQ_SIG;
+    IParetoDollarQueue.Method[] memory allowedMethods = new IParetoDollarQueue.Method[](4);
+    allowedMethods[0] = IParetoDollarQueue.Method(DEPOSIT_AA_SIG, 0);
+    allowedMethods[1] = IParetoDollarQueue.Method(WITHDRAW_AA_SIG, 2);
+    allowedMethods[2] = IParetoDollarQueue.Method(CLAIM_REQ_SIG, 1);
+    allowedMethods[3] = IParetoDollarQueue.Method(CLAIM_INSTANT_REQ_SIG, 1);
     uint256 maxCap = 0; // unlimited
     queue.addYieldSource(FAS_USDC_CV, USDC, AA_FAS_USDC_CV, maxCap, allowedMethods, 1);
     vm.stopPrank();
@@ -999,16 +1012,15 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _callWhitelistedMethods(USDS_USDC_PSM, BUY_GEM_SIG, abi.encode(random, amount));
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
     _callWhitelistedMethods(USDS_USDC_PSM, SELL_GEM_SIG, abi.encode(random, amount));
+    vm.stopPrank();
 
     // same for ERC4626 methods
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
-    _callWhitelistedMethods(SUSDS, DEPOSIT_4626_SIG, abi.encode(random, amount));
+    _deposit4626AnyAddress(SUSDS, amount, random);
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
-    _callWhitelistedMethods(SUSDS, REDEEM_4626_SIG, abi.encode(amount, random, address(queue)));
+    _redeem4626AnyAddress(SUSDS, amount, random, 1);
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
-    _callWhitelistedMethods(SUSDS, WITHDRAW_4626_SIG, abi.encode(amount, random, address(queue)));
-
-    vm.stopPrank();
+    _withdraw4626AnyAddress(SUSDS, amount, random, 1);
   }
 
   function _depositYield() internal {
@@ -1070,33 +1082,56 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
   /// @notice deposit in ERC4626 vault
   function _deposit4626(address source, uint256 amount) internal returns (uint256 amount4626) {
+    return _deposit4626AnyAddress(source, amount, address(queue));
+  }
+
+  /// @notice deposit in ERC4626 vault
+  function _deposit4626AnyAddress(address source, uint256 amount, address receiver) internal returns (uint256 amount4626) {
     // call with method not allowed should revert 
     address[] memory sources = new address[](1);
     sources[0] = source;
     bytes4[] memory methods = new bytes4[](1);
     methods[0] = DEPOSIT_4626_SIG;
     bytes[] memory args = new bytes[](1);
-    args[0] = abi.encode(amount, address(queue));
+    args[0] = abi.encode(amount, receiver);
     vm.prank(TL_MULTISIG);
     queue.depositFunds(sources, methods, args);
 
     // source is usually the erc4626 token itself
-    return IERC20Metadata(source).balanceOf(address(queue));
+    return IERC20Metadata(source).balanceOf(receiver);
   }
 
   /// @notice redeem from ERC4626 vault
   function _redeem4626(address source, uint256 shares, uint256 _epoch) internal returns (uint256) {
+    return _redeem4626AnyAddress(source, shares, address(queue), _epoch);
+  }
+
+  function _redeem4626AnyAddress(address source, uint256 shares, address receiver, uint256 _epoch) internal returns (uint256) {
     // call with method not allowed should revert
     address[] memory sources = new address[](1);
     sources[0] = source;
     bytes4[] memory methods = new bytes4[](1);
     methods[0] = REDEEM_4626_SIG;
     bytes[] memory args = new bytes[](1);
-    args[0] = abi.encode(shares, address(queue), address(queue));
+    args[0] = abi.encode(shares, receiver, receiver);
     vm.prank(TL_MULTISIG);
     queue.redeemFunds(sources, methods, args, _epoch);
 
-    return IERC20Metadata(IERC4626(source).asset()).balanceOf(address(queue));
+    return IERC20Metadata(IERC4626(source).asset()).balanceOf(receiver);
+  }
+
+  function _withdraw4626AnyAddress(address source, uint256 assets, address receiver, uint256 _epoch) internal returns (uint256) {
+    // call with method not allowed should revert
+    address[] memory sources = new address[](1);
+    sources[0] = source;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = WITHDRAW_4626_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode(assets, receiver, receiver);
+    vm.prank(TL_MULTISIG);
+    queue.redeemFunds(sources, methods, args, _epoch);
+
+    return IERC20Metadata(IERC4626(source).asset()).balanceOf(receiver);
   }
 
   // buy USDC with USDS via PSM

@@ -27,6 +27,12 @@ interface IParetoDollarQueue {
   event YieldSourceRemoved(address indexed source);
   event NewEpoch(uint256 indexed epoch);
 
+  /// @notice Allowed methods structure.
+  struct Method {
+    bytes4 method; // method signature
+    uint8 methodType; // 0 = depositFunds, 1 = callWhitelistedMethods, 2 = redeemFunds
+  }
+
   /// @notice Yield source structure.
   struct YieldSource {
     IERC20Metadata token;  // underlying token used by the vault
@@ -34,7 +40,7 @@ interface IParetoDollarQueue {
     address vaultToken; // token used by the vault
     uint256 maxCap; // maximum amount that can be deposited in the vault (interest is not included)
     uint256 depositedAmount; // amount deposited in the vault (interest is not included)
-    bytes4[] allowedMethods; // allowed methods to call on the vault
+    Method[] allowedMethods; // allowed methods to call on the vault
     uint8 vaultType; // type of the vault (1 = Pareto Credit Vault, 2 = ERC4626)
   }
 
@@ -50,7 +56,7 @@ interface IParetoDollarQueue {
     address _token, 
     address _vaultToken, 
     uint256 _maxCap, 
-    bytes4[] calldata allowedMethods,
+    Method[] calldata allowedMethods,
     uint8 _vaultType
   ) external;
   function removeYieldSource(address _source) external;

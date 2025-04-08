@@ -236,21 +236,6 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     return "RC";
   }
 
-  /// @notice Check if a method is allowed to be called on the yield source.
-  /// @param _allowedMethods The list of allowed methods.
-  /// @param _method The method to check.
-  /// @return True if the method is allowed, false otherwise.
-  function _isMethodAllowed(bytes4[] memory _allowedMethods, bytes4 _method) internal pure returns (bool) {
-    uint256 _allowedMethodsLen = _allowedMethods.length;
-    for (uint256 i = 0; i < _allowedMethodsLen; i++) {
-      if (_allowedMethods[i] == _method) {
-        return true;
-      }
-    }
-    // needed to avoid warning during compilation
-    return false;
-  }
-
   /// @notice Call a method on a target address.
   /// @param _target The target address.
   /// @param _method The method to call.
@@ -278,13 +263,18 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     return returnData;
   }
 
-  /// @notice check if _method is in _allowedMethods array
+  /// @notice Check if a method is allowed to be called on the yield source and for a specific manager action.
   /// @param _method The method to check.
   /// @param _allowedMethods The list of allowed methods.
-  function _checkMethod(bytes4 _method, bytes4[] memory _allowedMethods) internal pure {
-    if (!_isMethodAllowed(_allowedMethods, _method)) {
-      revert NotAllowed();
+  /// @param funcType The type of function (0 = depositFunds, 1 = callWhitelistedMethods, 2 = redeemFunds).
+  function _checkMethod(bytes4 _method, Method[] memory _allowedMethods, uint256 funcType) internal pure {
+    uint256 _allowedMethodsLen = _allowedMethods.length;
+    for (uint256 i = 0; i < _allowedMethodsLen; i++) {
+      if (_allowedMethods[i].method == _method && _allowedMethods[i].methodType == funcType) {
+        return;
+      }
     }
+    revert NotAllowed();
   }
 
   ///////////////////////////
@@ -398,19 +388,17 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     uint256 _epochPending = epochPending[_epoch];
     uint256 totRedeemedScaled;
     address source;
-    bytes4 method;
 
     // loop through the vaults and redeem funds
     for (uint256 i = 0; i < vaultsLen; i++) {
-      method = _methods[i];
       source = _sources[i];
       _yieldSource = yieldSources[source];
       // revert if method is not allowed (will also revert if yield source is not defined)
-      _checkMethod(method, _yieldSource.allowedMethods);
+      _checkMethod(_methods[i], _yieldSource.allowedMethods, 2);
       // redeem funds into the yield source
       balPre = _yieldSource.token.balanceOf(address(this));
       // do call on the yield source
-      _externalCall(source, method, _args[i]);
+      _externalCall(source, _methods[i], _args[i]);
       // calculate redeemed amount
       redeemed = _yieldSource.token.balanceOf(address(this)) - balPre;
       // update the depositedAmount in storage
@@ -508,7 +496,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     for (uint256 i = 0; i < _vaultsLen; i++) {
       _yieldSource = yieldSources[_sources[i]];
       // revert if method is not allowed (will also revert if yield source is not defined)
-      _checkMethod(_methods[i], _yieldSource.allowedMethods);
+      _checkMethod(_methods[i], _yieldSource.allowedMethods, 0);
 
       // deposit funds into the yield source
       balPre = _yieldSource.token.balanceOf(address(this));
@@ -561,7 +549,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     // loop through the sources and call the methods
     for (uint256 i = 0; i < _sourcesLen; i++) {
       // revert if the method is not allowed
-      _checkMethod(_methods[i], yieldSources[_sources[i]].allowedMethods);
+      _checkMethod(_methods[i], yieldSources[_sources[i]].allowedMethods, 1);
       // call the method on the yield source
       _externalCall(_sources[i], _methods[i], _args[i]);
 
@@ -582,7 +570,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     address _token, 
     address _vaultToken, 
     uint256 _maxCap, 
-    bytes4[] calldata _allowedMethods,
+    Method[] calldata _allowedMethods,
     uint8 _vaultType
   ) external {
     _checkOwner();
