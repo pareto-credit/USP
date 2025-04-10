@@ -41,15 +41,15 @@ $ bun run clean
 
 ### Deploy
 
+In `Deploy.s.sol` in `run()` you can set network used for the deployment.
+
 ```sh
 forge script ./script/Deploy.s.sol \
-   --fork-url $ETH_RPC_URL \
    --ledger \
    --broadcast \
    --optimize \
-   --optimizer-runs 999999 \
+   --optimizer-runs 99999 \
    --verify \
-   --with-gas-price 5000000000 \
    --sender "XXXXX" \
    --slow \
    -vvv

@@ -29,6 +29,7 @@
 
 [etherscan]
   mainnet = { key = "${API_KEY_ETHERSCAN}" }
+  optimism = { key = "${API_KEY_ETHERSCAN_OPTIMISM}" }
 
 [fmt]
   bracket_spacing = true
@@ -48,6 +49,6 @@
   gnosis_chain = "https://rpc.gnosischain.com"
   localhost = "http://localhost:8545"
   mainnet = "https://eth-mainnet.g.alchemy.com/v2/${API_KEY_ALCHEMY}"
-  optimism = "https://optimism-rpc.publicnode.com"
+  optimism = "https://opt-mainnet.g.alchemy.com/v2/${API_KEY_ALCHEMY}"
   polygon = "https://polygon-bor-rpc.publicnode.com"
   sepolia = "https://ethereum-sepolia-rpc.publicnode.com"
