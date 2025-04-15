@@ -171,12 +171,16 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     // if vaultType is not one supported we skip it and return 0
   }
 
+  //////////////////////////
+  /// Internal functions ///
+  //////////////////////////
+
   /// @notice Get the total value in this contract (scaled to 18 decimals) of a Pareto Credit Vault.
   /// @param yieldSource The address of the Pareto Credit Vault.
   /// @param vaultToken The address of the vault token (Tranche token).
   /// @param token The address of the underlying token.
   /// @return The total value of the Pareto Credit Vault in this contract.
-  function scaledNAVCreditVault(address yieldSource, address vaultToken, IERC20Metadata token) public view returns (uint256) {
+  function scaledNAVCreditVault(address yieldSource, address vaultToken, IERC20Metadata token) internal view returns (uint256) {
     IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
     IIdleCreditVault strategy = IIdleCreditVault(cv.strategy());
 
@@ -191,15 +195,11 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
   /// @notice Get the total value in this contract (scaled to 18 decimals) of an ERC4626 vault.
   /// @param vault The address of the ERC4626 vault token.
   /// @return The total value of the ERC4626 vault in this contract.
-  function scaledNAVERC4626(IERC4626 vault) public view returns (uint256) {
+  function scaledNAVERC4626(IERC4626 vault) internal view returns (uint256) {
     // ERC4626 vault
     // convertToAssets returns value in underlying decimals so we scale it to 18 decimals
     return vault.convertToAssets(vault.balanceOf(address(this))) * 10 ** (18 - IERC20Metadata(vault.asset()).decimals());
   }
-
-  //////////////////////////
-  /// Internal functions ///
-  //////////////////////////
 
   /// @notice Check if the caller is the ParetoDollar contract.
   function _onlyPar() internal view {
