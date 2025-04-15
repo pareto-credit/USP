@@ -484,7 +484,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
 
     uint256 _vaultsLen = _sources.length;
     // check if the vaults and methods are the same length, check also if arguments have the same length
-    if (_vaultsLen == 0 || _vaultsLen != _methods.length || _vaultsLen != _args.length) {
+    if (_vaultsLen != _methods.length || _vaultsLen != _args.length) {
       revert Invalid();
     }
   
