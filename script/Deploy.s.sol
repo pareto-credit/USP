@@ -11,8 +11,11 @@ import { ParetoDollarQueue, IParetoDollarQueue } from "../src/ParetoDollarQueue.
 import { Constants } from "../src/Constants.sol";
 
 contract DeployScript is Script, Constants {
-  function run() public broadcast {
+  function run() public {
+    vm.createSelectFork("mainnet");
+    vm.startBroadcast();
     _deploy(true);
+    vm.stopBroadcast();
   }
 
   function _deploy(bool shouldLog) public returns (
@@ -31,9 +34,9 @@ contract DeployScript is Script, Constants {
           HYPERNATIVE_PAUSER,
           // Precompute the address of the ParetoDollarQueue contract
           // - first contract is the ParetoDollar implementation (nonce)
-          // - second contract is the ParetoDollar proxy (nonce + 1)
+          // - second contract is the ParetoDollar proxy + admin (nonce + 1)
           // - third contract is the ParetoDollarQueue implementation (nonce + 2)
-          // - fourth contract is the ParetoDollarQueue proxy (nonce + 3)
+          // - fourth contract is the ParetoDollarQueue proxy + admin (nonce + 3)
           vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 3)
         )
       )
@@ -52,9 +55,9 @@ contract DeployScript is Script, Constants {
           address(par),
           // Precompute the address of the ParetoDollarStaking contract
           // - first contract is the ParetoDollarQueue implementation (nonce)
-          // - second contract is the ParetoDollarQueue proxy (nonce + 1)
+          // - second contract is the ParetoDollarQueue proxy + admin (nonce + 1)
           // - third contract is the ParetoDollarStaking implementation (nonce + 2)
-          // - fourth contract is the ParetoDollarStaking proxy (nonce + 3)
+          // - fourth contract is the ParetoDollarStaking proxy + admin (nonce + 3)
           vm.computeCreateAddress(DEPLOYER, vm.getNonce(DEPLOYER) + 3),
           managersQueue
         )
@@ -163,11 +166,5 @@ contract DeployScript is Script, Constants {
 
       console.log('IMPORTANT: Queue contract should be whitelisted on each credit vault');
     }
-  }
-
-  modifier broadcast() {
-    vm.startBroadcast();
-    _;
-    vm.stopBroadcast();
   }
 }
