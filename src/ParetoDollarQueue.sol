@@ -411,15 +411,18 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
       }
     }
 
-    // update pending withdrawals for the epoch
-    if (totRedeemedScaled >= _epochPending) {
-      // if there are pending requests and funds to fulfill all
-      // requests then we update epochPending
-      if (_epochPending > 0) {
-        epochPending[_epoch] = 0;
+    // update epochPending only for epochs already closed, not for the current epoch which is not yet closed
+    if (_epoch != epochNumber) {
+      // update pending withdrawals for the epoch
+      if (totRedeemedScaled >= _epochPending) {
+        // if there are pending requests and funds to fulfill all
+        // requests then we update epochPending
+        if (_epochPending > 0) {
+          epochPending[_epoch] = 0;
+        }
+      } else {
+        epochPending[_epoch] -= totRedeemedScaled;
       }
-    } else {
-      epochPending[_epoch] -= totRedeemedScaled;
     }
   }
 
