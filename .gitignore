@@ -17,8 +17,3 @@ pnpm-lock.yaml
 yarn.lock
 doc.md
 TODO.md
-
-# broadcasts
-!broadcast
-broadcast/*
-broadcast/*/31337/
