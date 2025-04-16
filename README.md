@@ -44,15 +44,15 @@ $ bun run clean
 In `Deploy.s.sol` in `run()` you can set network used for the deployment.
 
 ```sh
-forge script ./script/Deploy.s.sol \
-   --ledger \
-   --broadcast \
-   --optimize \
-   --optimizer-runs 99999 \
-   --verify \
-   --sender "XXXXX" \
-   --slow \
-   -vvv
+$ bun run deploy
+```
+
+### Upgrade
+
+In `Upgrade.s.sol` in `run()` you can set network used and other params like proxy.
+
+```sh
+$ bun run upgrade
 ```
 
 ### Test

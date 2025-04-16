@@ -11,8 +11,11 @@ import { ParetoDollarQueue, IParetoDollarQueue } from "../src/ParetoDollarQueue.
 import { Constants } from "../src/Constants.sol";
 
 contract DeployScript is Script, Constants {
+  string public constant BUILD_INFO_DIR = "old-build-info/";
+  string public constant network = "optimism";
+
   function run() public {
-    vm.createSelectFork("mainnet");
+    vm.createSelectFork(network);
     vm.startBroadcast();
     _deploy(true);
     vm.stopBroadcast();
@@ -23,6 +26,8 @@ contract DeployScript is Script, Constants {
     ParetoDollarStaking sPar,
     ParetoDollarQueue queue
   ) {
+    console.log('Deploying in ', network);
+
     // Deploy ParetoDollar with transparent proxy
     // check https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades for more info
     par = ParetoDollar(Upgrades.deployTransparentProxy(
@@ -165,6 +170,7 @@ contract DeployScript is Script, Constants {
       console.log();
 
       console.log('IMPORTANT: Queue contract should be whitelisted on each credit vault');
+      console.log(string(abi.encodePacked('IMPORTANT: Move new build info from ', BUILD_INFO_DIR, ' to (replace old file) ', string(abi.encodePacked(BUILD_INFO_DIR, network)))));
     }
   }
 }
