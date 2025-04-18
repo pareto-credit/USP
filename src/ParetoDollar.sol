@@ -226,6 +226,7 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   }
 
   /// @notice Add new collateral
+  /// @dev IMPORTANT: be sure that priceFeed has no min/max answer
   /// @param token The collateral token address.
   /// @param tokenDecimals The decimals for the collateral token.
   /// @param priceFeed The primary oracle address.
