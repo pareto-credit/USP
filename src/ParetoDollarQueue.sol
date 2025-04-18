@@ -198,7 +198,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   function scaledNAVERC4626(IERC4626 vault) internal view returns (uint256) {
     // ERC4626 vault
     // convertToAssets returns value in underlying decimals so we scale it to 18 decimals
-    return vault.convertToAssets(vault.balanceOf(address(this))) * 10 ** (18 - IERC20Metadata(vault.asset()).decimals());
+    return vault.previewRedeem(vault.balanceOf(address(this))) * 10 ** (18 - IERC20Metadata(vault.asset()).decimals());
   }
 
   /// @notice Check if the caller is the ParetoDollar contract.
