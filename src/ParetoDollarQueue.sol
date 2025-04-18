@@ -85,7 +85,6 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     address _sPar,
     address[] memory _managers
   ) public initializer {
-    __ReentrancyGuard_init();
     __EmergencyUtils_init(msg.sender, _admin, _pauser);
     par = IParetoDollar(_par);
     sPar = IParetoDollarStaking(_sPar);
@@ -608,7 +607,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
 
     YieldSource memory _ys = yieldSources[_source];
     // revert if the token is not in the yield sources
-    if (address(_ys.token) == address(0)) {
+    if (address(_ys.source) == address(0)) {
       revert YieldSourceInvalid();
     }
     // revert if the yield source is not empty, no need to unscale the value
@@ -624,7 +623,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     YieldSource[] memory _sources = allYieldSources;
     uint256 sourcesLen = _sources.length;
     for (uint256 i = 0; i < sourcesLen; i++) {
-      if (address(_sources[i].token) == address(_ys.token)) {
+      if (address(_sources[i].source) == address(_ys.source)) {
         allYieldSources[i] = _sources[sourcesLen - 1];
         allYieldSources.pop();
         break;

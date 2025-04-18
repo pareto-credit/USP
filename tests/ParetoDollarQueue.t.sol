@@ -289,6 +289,24 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.stopPrank();
   }
 
+  function testRemoveLastSourceWithAnotherWithSameToken() public {
+    ParetoDollarQueue.YieldSource[] memory initialSources = queue.getAllYieldSources();
+    ParetoDollarQueue.YieldSource memory source1 = initialSources[0];
+    ParetoDollarQueue.YieldSource memory source2 = initialSources[2];
+    assertEq(address(source1.token), address(source2.token)); // Identical tokens
+    assertNotEq(source1.source, source2.source); // However not the same sources
+
+    vm.startPrank(queue.owner());
+    queue.removeYieldSource(source2.source); // Remove the last source (source2)
+
+    ParetoDollarQueue.YieldSource memory firstYieldSource = queue.getAllYieldSources()[0];
+    assertEq(firstYieldSource.source, source1.source, 'The first yield source should be unchanged');
+    assertEq(address(firstYieldSource.token), address(source1.token), 'The first yield source token should be unchanged');
+    (IERC20Metadata sourceToken, address sourceSource, , , , ) = queue.yieldSources(firstYieldSource.source);
+    assertEq(address(sourceToken), address(source1.token)); // Active source has the mapping for it deleted, data for it is deleted
+    assertEq(address(sourceSource), address(source1.source)); // Active source has the mapping for it deleted, data for it is deleted
+  }
+
   function testGetUnlentBalanceScaled() external {
     uint256 totCollateral = queue.getUnlentBalanceScaled();
     assertEq(totCollateral, 0, 'total collateral should be 0');
