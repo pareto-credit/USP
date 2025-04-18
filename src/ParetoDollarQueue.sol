@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 // OpenZeppelin upgradeable imports.
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC4626.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "./interfaces/IParetoDollar.sol";
 import "./interfaces/IParetoDollarStaking.sol";
 import "./interfaces/IParetoDollarQueue.sol";
@@ -25,7 +24,7 @@ import "./Constants.sol";
 */
 
 /// @title ParetoDollarQueue - Contract to queue redemptions for ParetoDollar
-contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, EmergencyUtils, Constants {
+contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   using SafeERC20 for IERC20Metadata;
 
   ///////////////////
@@ -101,7 +100,9 @@ contract ParetoDollarQueue is IParetoDollarQueue, ReentrancyGuardUpgradeable, Em
     // add allowance for ParetoDollar to ParetoDollarStaking
     IERC20Metadata(_par).safeIncreaseAllowance(_sPar, type(uint256).max);
     // add allowance for USDS to USDS-USDC PSM
-    IERC20Metadata(USDS).safeIncreaseAllowance(USDS_USDC_PSM, type(uint256).max);
+    if (USDS != address(0) && USDS_USDC_PSM != address(0)) {
+      IERC20Metadata(USDS).safeIncreaseAllowance(USDS_USDC_PSM, type(uint256).max);
+    }
   }
 
   //////////////////////
