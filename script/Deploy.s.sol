@@ -12,10 +12,11 @@ import { Constants } from "../src/Constants.sol";
 
 contract DeployScript is Script, Constants {
   string public constant BUILD_INFO_DIR = "old-build-info/";
-  string public constant network = "optimism";
+  string public constant network = "mainnet";
 
   function run() public {
     vm.createSelectFork(network);
+    console.log('Deploying in ', network);
     vm.startBroadcast();
     _deploy(true);
     vm.stopBroadcast();
@@ -26,8 +27,6 @@ contract DeployScript is Script, Constants {
     ParetoDollarStaking sPar,
     ParetoDollarQueue queue
   ) {
-    console.log('Deploying in ', network);
-
     // Deploy ParetoDollar with transparent proxy
     // check https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades for more info
     par = ParetoDollar(Upgrades.deployTransparentProxy(
