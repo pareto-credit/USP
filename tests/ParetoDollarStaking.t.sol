@@ -19,6 +19,7 @@ import { IPriceFeed } from "../src/interfaces/IPriceFeed.sol";
 import { IKeyring } from "../src/interfaces/IKeyring.sol";
 import { DeployScript, Constants } from "../script/Deploy.s.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ERC4626Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 
 contract TestParetoDollarStaking is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
@@ -84,10 +85,14 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(sPar.paused(), true, 'The contract should be paused');
 
     // when paused no deposits or redeems can be made
-    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxDeposit.selector, address(this), 1e18, 0));
     sPar.deposit(1e18, address(this));
-    vm.expectRevert(abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector));
+    vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxRedeem.selector, address(this), 1e18, 0));
     sPar.redeem(1e18, address(this), address(this));
+    vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxMint.selector, address(this), 1e18, 0));
+    sPar.mint(1e18, address(this));
+    vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxWithdraw.selector, address(this), 1e18, 0));
+    sPar.withdraw(1e18, address(this), address(this));
     vm.stopPrank();
   }
 
