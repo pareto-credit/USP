@@ -203,4 +203,24 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
 
     emit RewardsDeposited(amount - _feeAmount);
   }
+
+  /// @dev See {IERC4626-maxDeposit}. Returns 0 if paused.
+  function maxDeposit(address _who) public view override returns (uint256) {
+    return paused() ? 0 : super.maxDeposit(_who);
+  }
+
+  /// @dev See {IERC4626-maxMint}. Returns 0 if paused.
+  function maxMint(address _who) public view override returns (uint256) {
+    return paused() ? 0 : super.maxMint(_who);
+  }
+
+  /// @dev See {IERC4626-maxWithdraw}. Returns 0 if paused.
+  function maxWithdraw(address _who) public view override returns (uint256) {
+    return paused() ? 0 : super.maxWithdraw(_who);
+  }
+
+  /// @dev See {IERC4626-maxRedeem}. Returns 0 if paused.
+  function maxRedeem(address _who) public view override returns (uint256) {
+    return paused() ? 0 : balanceOf(_who);
+  }
 }
