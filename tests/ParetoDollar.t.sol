@@ -58,6 +58,7 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(usdcCollateral.priceFeed, USDC_FEED, 'USDC priceFeed should be set');
     assertEq(usdcCollateral.tokenDecimals, 6, 'USDC should have 6 decimals');
     assertEq(usdcCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDC should have 8 decimals');
+    assertEq(usdcCollateral.validityPeriod, 24 hours, 'Price feed for USDC should have validityPeriod of 24 hours');
   
     IParetoDollar.CollateralInfo memory usdtCollateral = par.getCollateralInfo(USDT);
 
@@ -66,6 +67,7 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(usdtCollateral.priceFeed, USDT_FEED, 'USDT priceFeed should be set');
     assertEq(usdtCollateral.tokenDecimals, 6, 'USDT should have 6 decimals');
     assertEq(usdtCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDT should have 8 decimals');
+    assertEq(usdtCollateral.validityPeriod, 24 hours, 'Price feed for USDT should have validityPeriod of 24 hours');
 
     address[] memory collaterals = par.getCollaterals();
     assertEq(collaterals.length, 3, 'There should be 2 collaterals');
@@ -76,38 +78,40 @@ contract TestParetoDollar is Test, DeployScript {
 
   function testAddCollateral() external {
     vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
-    par.addCollateral(USDT, 6, address(1), 8);
+    par.addCollateral(USDT, 6, address(1), 8, 1 hours);
 
     vm.startPrank(par.owner());
     // revert if token is address(0)
     vm.expectRevert(IParetoDollar.InvalidData.selector);
-    par.addCollateral(address(0), 6, address(1), 8);
+    par.addCollateral(address(0), 6, address(1), 8, 1 hours);
     
     // revert if priceFeed is address(0)
     vm.expectRevert(IParetoDollar.InvalidData.selector);
-    par.addCollateral(USDT, 6, address(0), 8);
+    par.addCollateral(USDT, 6, address(0), 8, 1 hours);
 
     vm.expectEmit(true, true, true, true);
-    emit IParetoDollar.CollateralAdded(address(1), address(2), 6, 8);
-    par.addCollateral(address(1), 6, address(2), 8);
+    emit IParetoDollar.CollateralAdded(address(1), address(2), 6, 8, 1 hours);
+    par.addCollateral(address(1), 6, address(2), 8, 1 hours);
     IParetoDollar.CollateralInfo memory newCollateral = par.getCollateralInfo(address(1));
 
     assertEq(newCollateral.allowed, true, 'new collateral should be allowed');
     assertEq(newCollateral.priceFeed, address(2), 'new priceFeed should be set');
     assertEq(newCollateral.tokenDecimals, 6, 'new should have 6 decimals');
     assertEq(newCollateral.priceFeedDecimals, 8, 'Price feed for USDT should have 8 decimals');
+    assertEq(newCollateral.validityPeriod, 1 hours, 'Price feed for USDT should have validityPeriod of 1 hours');
 
     address[] memory collaterals = par.getCollaterals();
     assertEq(collaterals.length, 4, 'There should be 4 collaterals');
     assertEq(collaterals[3], address(1), 'New collateral address in getCollaterals should be address(1)');
 
     // overwrite collateral
-    par.addCollateral(address(1), 66, address(22), 88);
+    par.addCollateral(address(1), 66, address(22), 88, 2 hours);
     IParetoDollar.CollateralInfo memory newCollateral2 = par.getCollateralInfo(address(1));
     assertEq(newCollateral2.allowed, true, 'new collateral should be allowed');
     assertEq(newCollateral2.priceFeed, address(22), 'new priceFeed should be set');
     assertEq(newCollateral2.tokenDecimals, 66, 'new should have 6 decimals');
     assertEq(newCollateral2.priceFeedDecimals, 88, 'Price feed for USDT should have 8 decimals');
+    assertEq(newCollateral2.validityPeriod, 2 hours, 'Price feed for USDT should have validityPeriod of 2 hours');
     assertEq(par.getCollaterals().length, 4, 'Collaterals length should not change');
     vm.stopPrank();
   }
@@ -126,6 +130,7 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(usdcCollateral.priceFeed, address(0), 'USDC feed should not be removed');
     assertEq(usdcCollateral.tokenDecimals, 0, 'USDC tokenDecimals should not be removed');
     assertEq(usdcCollateral.priceFeedDecimals, 0, 'USDC priceFeedDecimals should not be removed');
+    assertEq(usdcCollateral.validityPeriod, 0, 'USDC validityPeriod should not be removed');
 
     vm.expectRevert(IParetoDollar.InvalidData.selector);
     par.removeCollateral(address(0));
@@ -339,19 +344,26 @@ contract TestParetoDollar is Test, DeployScript {
     par.mint(USDC, 100);
     vm.clearMockedCalls();
 
+    IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     // cannot mint with stale price
     vm.mockCall(
       address(USDC_FEED),
       abi.encodeWithSelector(IPriceFeed.latestRoundData.selector),
-      abi.encode(uint80(1), int256(1e8), uint256(block.timestamp - 1), uint256(block.timestamp - (par.oracleValidityPeriod() + 1)), uint80(1))
+      abi.encode(uint80(1), int256(1e8), uint256(block.timestamp - 1), uint256(block.timestamp - (usdcCollateral.validityPeriod + 1)), uint80(1))
     );
     vm.expectRevert(IParetoDollar.InvalidOraclePrice.selector);
     par.mint(USDC, 100);
     vm.clearMockedCalls();
 
-    // can mint with stale price only if oracleValidityPeriod is set to 0
+    // can mint with stale price only if oracle validityPeriod is set to 0
     vm.startPrank(par.owner());
-    par.setOracleValidityPeriod(0);
+    par.addCollateral(
+      USDC,
+      IERC20Metadata(USDC).decimals(),
+      USDC_FEED,
+      USDC_FEED_DECIMALS,
+      0 // set validity period to 0
+    );
     vm.stopPrank();
     vm.mockCall(
       address(USDC_FEED),
@@ -421,16 +433,6 @@ contract TestParetoDollar is Test, DeployScript {
     emit IParetoDollar.Redeemed(address(this), 1, uspAmount);
     uint256 uspAmountRequested = par.claimRedeemRequest(1);
     assertEq(uspAmountRequested, uspAmount, 'Returned amount should be equal to requested USP amount');
-  }
-
-  function testSetOracleValidityPeriod() external {
-    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
-    par.setOracleValidityPeriod(1);
-
-    vm.startPrank(par.owner());
-    par.setOracleValidityPeriod(1);
-    assertEq(par.oracleValidityPeriod(), 1, 'oracle validity period should be updated');
-    vm.stopPrank();
   }
 
   function testMintForQueue() external {

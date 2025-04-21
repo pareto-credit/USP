@@ -112,28 +112,13 @@ contract DeployScript is Script, Constants {
     par.setKeyringParams(KEYRING_WHITELIST, KEYRING_POLICY);
 
     // Add USDC collateral
-    par.addCollateral(
-      USDC,
-      IERC20Metadata(USDC).decimals(),
-      USDC_FEED,
-      USDC_FEED_DECIMALS
-    );
+    par.addCollateral(USDC, IERC20Metadata(USDC).decimals(), USDC_FEED, USDC_FEED_DECIMALS, 24 hours);
 
     // Add USDT collateral
-    par.addCollateral(
-      USDT,
-      IERC20Metadata(USDT).decimals(),
-      USDT_FEED,
-      USDT_FEED_DECIMALS
-    );
+    par.addCollateral(USDT, IERC20Metadata(USDT).decimals(), USDT_FEED, USDT_FEED_DECIMALS, 24 hours);
 
     // Add USDS collateral
-    par.addCollateral(
-      USDS,
-      IERC20Metadata(USDS).decimals(),
-      USDS_FEED,
-      USDS_FEED_DECIMALS
-    );
+    par.addCollateral(USDS, IERC20Metadata(USDS).decimals(), USDS_FEED, USDS_FEED_DECIMALS, 24 hours);
 
     // transfer ownership of ParetoDollar to TL_MULTISIG
     par.transferOwnership(TL_MULTISIG);
