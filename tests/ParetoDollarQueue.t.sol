@@ -42,9 +42,13 @@ contract TestParetoDollarQueue is Test, DeployScript {
     vm.prank(TL_MULTISIG);
     IKeyring(KEYRING_WHITELIST).setWhitelistStatus(address(queue), true);
 
-    vm.prank(par.owner());
-    par.setOracleValidityPeriod(0);
-
+    // set oracles validityPeriod to 0
+    vm.startPrank(par.owner());
+    par.addCollateral(USDC, IERC20Metadata(USDC).decimals(), USDC_FEED, USDC_FEED_DECIMALS, 0);
+    par.addCollateral(USDT, IERC20Metadata(USDT).decimals(), USDT_FEED, USDT_FEED_DECIMALS, 0);
+    par.addCollateral(USDS, IERC20Metadata(USDS).decimals(), USDS_FEED, USDS_FEED_DECIMALS, 0);
+    vm.stopPrank();
+  
     skip(100);
   }
 

@@ -55,8 +55,6 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   uint256 public keyringPolicyId;
   /// @notice Address of the queue contract for redemptions and deployments.
   ParetoDollarQueue public queue;
-  /// @notice oracle validity period (in seconds)
-  uint256 public oracleValidityPeriod;
 
   //////////////////////////
   /// Initialize methods ///
@@ -81,7 +79,6 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     __EmergencyUtils_init(msg.sender, _admin, _pauser);
 
     queue = ParetoDollarQueue(_queue);
-    oracleValidityPeriod = 24 hours;
   }
 
   ////////////////////////
@@ -161,34 +158,15 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     if (!info.allowed) {
       revert CollateralNotAllowed();
     }
-    price = _getOraclePrice(info.priceFeed, info.priceFeedDecimals);
-  }
-
-  /// @notice Retrieves the oracle price for collateral and normalizes it to 18 decimals.
-  /// @param oracle The primary oracle address.
-  /// @param oracleDecimals The decimals for the primary oracle.
-  /// @return price The normalized price (18 decimals).
-  function _getOraclePrice(address oracle, uint8 oracleDecimals) internal view returns (uint256 price) {
-    price = _getScaledOracleAnswer(oracle, oracleDecimals);
-    if (price > 0) {
-      return price;
-    }
-    revert InvalidOraclePrice();
-  }
-
-  /// @notice Retrieves the oracle price for collateral and normalizes it to 18 decimals.
-  /// @param oracle The oracle address.
-  /// @param feedDecimals The decimals for the oracle.
-  /// @return price The normalized price (18 decimals).
-  function _getScaledOracleAnswer(address oracle, uint8 feedDecimals) internal view returns (uint256) {
-    (,int256 answer,,uint256 updatedAt,) = IPriceFeed(oracle).latestRoundData();
-    uint256 _oracleValidity = oracleValidityPeriod;
+    // Fetch latest round data from the oracle
+    (,int256 answer,,uint256 updatedAt,) = IPriceFeed(info.priceFeed).latestRoundData();
     // if validity period is 0, it means that we accept any price > 0
     // othwerwise, we check if the price is updated within the validity period
-    if (answer > 0 && (_oracleValidity == 0 || (updatedAt >= block.timestamp - _oracleValidity))) {
-      return uint256(answer) * 10 ** (18 - feedDecimals);
+    if (answer > 0 && (info.validityPeriod == 0 || (updatedAt >= block.timestamp - info.validityPeriod))) {
+      // scale the value to 18 decimals
+      return uint256(answer) * 10 ** (18 - info.priceFeedDecimals);
     }
-    return 0;
+    revert InvalidOraclePrice();
   }
 
   /// @notice Check if wallet is allowed to interact with the contract
@@ -227,15 +205,18 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
 
   /// @notice Add new collateral
   /// @dev IMPORTANT: be sure that priceFeed has no min/max answer
+  /// @dev This method can be used also to update collateral info by passing the same token address
   /// @param token The collateral token address.
   /// @param tokenDecimals The decimals for the collateral token.
   /// @param priceFeed The primary oracle address.
   /// @param priceFeedDecimals The decimals for the primary oracle.
+  /// @param validityPeriod The validity period for the oracle price (in seconds).
   function addCollateral(
     address token,
     uint8 tokenDecimals,
     address priceFeed,
-    uint8 priceFeedDecimals
+    uint8 priceFeedDecimals,
+    uint256 validityPeriod
   ) external {
     _checkOwner();
 
@@ -246,13 +227,14 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
       allowed: true,
       priceFeed: priceFeed,
       tokenDecimals: tokenDecimals,
-      priceFeedDecimals: priceFeedDecimals
+      priceFeedDecimals: priceFeedDecimals,
+      validityPeriod: validityPeriod
     });
     // add the token to the list of collaterals
     if (!isOverwriting) {
       collaterals.push(token);
     }
-    emit CollateralAdded(token, priceFeed, tokenDecimals, priceFeedDecimals);
+    emit CollateralAdded(token, priceFeed, tokenDecimals, priceFeedDecimals, validityPeriod);
   }
 
   /// @notice Remove collateral
@@ -296,13 +278,5 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
 
     keyring = _keyring;
     keyringPolicyId = _keyringPolicyId;
-  }
-
-  /// @notice Set the oracle validity period.
-  /// @param _oracleValidityPeriod The new oracle validity period (in seconds).
-  function setOracleValidityPeriod(uint256 _oracleValidityPeriod) external {
-    _checkOwner();
-
-    oracleValidityPeriod = _oracleValidityPeriod;
   }
 }

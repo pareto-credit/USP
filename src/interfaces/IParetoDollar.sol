@@ -13,7 +13,8 @@ interface IParetoDollar {
     address indexed token,
     address priceFeed,
     uint8 tokenDecimals,
-    uint8 priceFeedDecimals
+    uint8 priceFeedDecimals,
+    uint256 validityPeriod
   );
   event CollateralRemoved(address indexed token);
   event Minted(address indexed user, address indexed collateralToken, uint256 collateralAmount, uint256 uspminted);
@@ -26,6 +27,7 @@ interface IParetoDollar {
     address priceFeed;               // Primary oracle address
     uint8 tokenDecimals;             // Collateral token decimals (e.g., 6 for USDC, 18 for DAI)
     uint8 priceFeedDecimals;         // Primary oracle decimals (e.g., 8 for many Chainlink feeds)
+    uint256 validityPeriod;           // Validity period in seconds
   }
 
   function getCollateralInfo(address collateralToken) external view returns (CollateralInfo memory);
