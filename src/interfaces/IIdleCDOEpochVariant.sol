@@ -15,4 +15,5 @@ interface IIdleCDOEpochVariant {
   function expectedEpochInterest() external view returns (uint256);
   function isEpochRunning() external view returns (bool);
   function defaulted() external view returns (bool);
+  function getContractValue() external view returns (uint256);
 }

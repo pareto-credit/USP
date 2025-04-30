@@ -194,11 +194,13 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// Admin functions ///
   ///////////////////////
 
-  /// @notice Burn USP from owner. This is used when there is a loss from one of the borrower
+  /// @notice Burn USP from owner/queue. This is used when there is a loss from one of the borrower
   /// and USP are withdrawed by the owner from the sUSP contract. In this way sUSP holders will absorb the loss
   /// @param _uspAmount amount of USP to burn.
   function emergencyBurn(uint256 _uspAmount) external {
-    _checkOwner();
+    if (msg.sender != owner() && msg.sender != address(queue)) {
+      revert NotAllowed();
+    }
 
     _burn(msg.sender, _uspAmount);
   }

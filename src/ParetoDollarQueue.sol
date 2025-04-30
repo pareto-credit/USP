@@ -444,25 +444,37 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     emit NewEpoch(_currEpoch + 1);
   }
 
-  /// @notice Deposit yield from vaults to ParetoDollarStaking
-  /// @dev The function mints ParetoDollar and deposits them into ParetoDollarStaking.
-  function depositYield() external {
+  /// @notice Account for gain and losses
+  /// @dev The function mints ParetoDollar and deposits them into ParetoDollarStaking if yield is positive
+  ///      or burn USP from staking contract if there are losses to account
+  function accountGainsLosses() external {
     // revert if the caller is not the manager
     _checkRole(MANAGER_ROLE);
 
     // We first fetch total ParetoDollar supply and add the total amount of reserved withdrawals
     // which are ParetoDollars already burned but not yet claimed
-
-    uint256 parSupply = IERC20Metadata(address(par)).totalSupply() + totReservedWithdrawals;
+    address _par = address(par);
+    uint256 parSupply = IERC20Metadata(_par).totalSupply() + totReservedWithdrawals;
     // we calculate the total amount of collaterals available scaled to 18 decimals
     uint256 totCollaterals = getTotalCollateralsScaled();
-    // calculate the gain
-    uint256 gain = totCollaterals > parSupply ? totCollaterals - parSupply : 0;
+    // calculate the gain/loss
+    int256 gain = int256(totCollaterals) - int256(parSupply);
     if (gain > 0) {
       // mint ParetoDollar to this contract equal to the gain
-      par.mintForQueue(gain);
+      par.mintForQueue(uint256(gain));
       // deposit ParetoDollar into the staking contract
-      sPar.depositRewards(gain);
+      sPar.depositRewards(uint256(gain));
+    } else if (gain < 0) {
+      // account for losses
+      // we need to burn the amount of ParetoDollar from ParetoDollarStaking equal to the loss
+      // so we first remove USP from the ParetoDollarStaking contract and then burn them via 
+      // ParetoDollar contract
+
+      // we need to check if supply is enough to cover the whole loss
+      uint256 sParSupply = IERC20Metadata(address(sPar)).totalSupply();
+      uint256 burnAmount = uint256(-gain) > sParSupply ? sParSupply : uint256(-gain);
+      sPar.emergencyWithdraw(_par, burnAmount);
+      par.emergencyBurn(burnAmount);
     }
   }
 

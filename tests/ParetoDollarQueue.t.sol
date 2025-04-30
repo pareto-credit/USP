@@ -967,16 +967,16 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), amount * 1e12, 1e12, 'totCollaterals value after CV redeem request is not correct');
   }
 
-  function testDepositYield() external {
+  function testAccountGains() external {
     vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
-    queue.depositYield();
+    queue.accountGainsLosses();
 
     // set sPar fees to 0 to ease calculations
     vm.startPrank(sPar.owner());
     sPar.updateFeeParams(0, address(1));
     vm.stopPrank();
 
-    _depositYield();
+    _accountGainsLosses();
     assertEq(par.totalSupply(), 0, 'total supply should not change if there is no new collateral');
 
     // deposit 100 USDC in the ParetoDollar
@@ -984,7 +984,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _mintUSP(address(this), USDC, amount);
     uint256 initialSupply = par.totalSupply();
 
-    _depositYield();
+    _accountGainsLosses();
     assertEq(par.totalSupply(), initialSupply, 'total supply should not change if there is no yield');
 
     uint256 trancheTokens = _depositFundsCV(FAS_USDC_CV, amount);
@@ -999,9 +999,95 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 priceDiff = pricePost - pricePre;
     uint256 gainScaled18 = trancheTokens * priceDiff / 1e6;
 
-    _depositYield();
+    _accountGainsLosses();
 
     assertApproxEqAbs(par.totalSupply(), initialSupply + gainScaled18, 1, 'total supply should increase by the yield gained');
+  }
+
+  function testAccountLosses() external {
+    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
+    queue.accountGainsLosses();
+
+    // set sPar fees to 0 to ease calculations
+    vm.startPrank(sPar.owner());
+    sPar.updateFeeParams(0, address(1));
+    vm.stopPrank();
+
+    // deposit 10M USDC in the ParetoDollar
+    uint256 amount = 10_000_000e6;
+    uint256 depositedAmountScaled = 10_000_000 * 1e18;
+    _mintUSP(address(this), USDC, amount);
+    // we stake only 1M
+    _stake(address(this), depositedAmountScaled / 10);    // deposit funds in CV
+    _depositFundsCV(FAS_USDC_CV, amount);
+
+    uint256 priceAAPre = IIdleCDOEpochVariant(FAS_USDC_CV).virtualPrice(IIdleCDOEpochVariant(FAS_USDC_CV).AATranche());
+    uint256 parSupplyPre = par.totalSupply();
+
+    // create a loss in CV
+    _createLossInCV(50e18); // 50% loss
+    uint256 priceAAPost = IIdleCDOEpochVariant(FAS_USDC_CV).virtualPrice(IIdleCDOEpochVariant(FAS_USDC_CV).AATranche());
+    uint256 diff = (priceAAPre - priceAAPost) * 1e18 / priceAAPre;
+    assertGt(priceAAPre, priceAAPost, 'CV price should decrease after loss');
+
+    // There are only a small portion of the funds out of total USP in stake and it's not enough to cover the whole loss
+    _accountGainsLosses();
+    uint256 parSupplyPost = par.totalSupply();
+    assertEq(parSupplyPost, parSupplyPre - depositedAmountScaled / 10, 'total supply should of USP did not decrease correctly');
+    // sPar should cover all possible losses so end price will be 0
+    assertEq(sPar.totalAssets(), 0, 'total assets of sPar should be 0');
+    assertEq(sPar.convertToAssets(1e18), 0, 'price of sPar should be 0');
+
+    // USP is now uncollateralized
+    assertApproxEqAbs(
+      queue.getTotalCollateralsScaled(), 
+      depositedAmountScaled - (depositedAmountScaled * diff / 1e18), 
+      1e6 * 10,
+      'total collaterals should be updated'
+    );
+  }
+
+  function testAccountLossesLossCovered() external {
+    vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
+    queue.accountGainsLosses();
+
+    // set sPar fees to 0 to ease calculations
+    vm.startPrank(sPar.owner());
+    sPar.updateFeeParams(0, address(1));
+    vm.stopPrank();
+
+    // deposit 10M USDC in the ParetoDollar
+    uint256 amount = 10_000_000e6;
+    uint256 depositedAmountScaled = 10_000_000 * 1e18;
+    _mintUSP(address(this), USDC, amount);
+    // we stake only 1M
+    _stake(address(this), depositedAmountScaled / 10);    // deposit funds in CV
+    _depositFundsCV(FAS_USDC_CV, amount);
+
+    uint256 priceAAPre = IIdleCDOEpochVariant(FAS_USDC_CV).virtualPrice(IIdleCDOEpochVariant(FAS_USDC_CV).AATranche());
+
+    // create a loss in CV
+    _createLossInCV(5e18); // 5% loss
+    uint256 priceAAPost = IIdleCDOEpochVariant(FAS_USDC_CV).virtualPrice(IIdleCDOEpochVariant(FAS_USDC_CV).AATranche());
+    assertGt(priceAAPre, priceAAPost, 'CV price should decrease after loss');
+
+    // All loss is covered by sUSP
+    _accountGainsLosses();
+    // sPar should cover all possible losses so end price will be 0.5 because we staked 10% of the deposited amount and there was 
+    // a loss of 5%
+    assertLt(sPar.convertToAssets(1e18), 0.5e18, 'price of sPar should be 0.5');
+
+    // USP is still collateralized
+    assertEq(queue.getTotalCollateralsScaled(), par.totalSupply(), 'total collaterals should be updated');
+  }
+
+  /// @param amountPerc percentage of the total amount in the CV (100e18 means 100%)
+  function _createLossInCV(uint256 amountPerc) internal {
+    // create a loss in CV (we move out strategyTokens)
+    address strategyTokens = IIdleCDOEpochVariant(FAS_USDC_CV).strategy();
+    uint256 totalDeposited = IIdleCDOEpochVariant(FAS_USDC_CV).getContractValue();
+    vm.prank(FAS_USDC_CV);
+    IERC20Metadata(strategyTokens).safeTransfer(address(2), totalDeposited * amountPerc / 100e18);
   }
 
   function testPSMInteractions() external {
@@ -1045,9 +1131,9 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _withdraw4626AnyAddress(SUSDS, amount, random, 1);
   }
 
-  function _depositYield() internal {
+  function _accountGainsLosses() internal {
     vm.prank(TL_MULTISIG);
-    queue.depositYield();
+    queue.accountGainsLosses();
   }
 
   function _mintUSP(address _user, address _collateral, uint256 _amount) internal returns (uint256 mintedAmount) {
@@ -1257,6 +1343,13 @@ contract TestParetoDollarQueue is Test, DeployScript {
     deal(_token, _user, _amount);
     vm.startPrank(_user);
     IERC20Metadata(_token).safeTransfer(_to, _amount);    
+    vm.stopPrank();
+  }
+
+  function _stake(address _who, uint256 _amount) internal returns (uint256 shares) {
+    vm.startPrank(_who);
+    par.approve(address(sPar), _amount);
+    shares = sPar.deposit(_amount, _who);
     vm.stopPrank();
   }
 }
