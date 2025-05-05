@@ -60,10 +60,10 @@ contract TestParetoDollarStaking is Test, DeployScript {
   }
 
   function testEmergencyWithdraw() external {
-    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    vm.expectRevert(abi.encodeWithSelector(ParetoDollarStaking.NotAllowed.selector));
     sPar.emergencyWithdraw(address(1), 1);
 
-    deal(USDC, address(sPar), 100);
+    deal(USDC, address(sPar), 200);
 
     uint256 balPre = IERC20Metadata(USDC).balanceOf(sPar.owner());
 
@@ -71,6 +71,12 @@ contract TestParetoDollarStaking is Test, DeployScript {
     sPar.emergencyWithdraw(USDC, 100);
     uint256 balPost = IERC20Metadata(USDC).balanceOf(sPar.owner());
     assertEq(balPost, balPre + 100, 'owner balance should increase by 100');
+    vm.stopPrank();
+
+    vm.startPrank(address(queue));
+    sPar.emergencyWithdraw(USDC, 100);
+    balPost = IERC20Metadata(USDC).balanceOf(address(queue));
+    assertEq(balPost, 100, 'queue balance should increase by 100');
     vm.stopPrank();
   }
 

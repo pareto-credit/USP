@@ -204,6 +204,17 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
     emit RewardsDeposited(amount - _feeAmount);
   }
 
+  /// @notice Emergency function for the owner/queue contract to withdraw collateral tokens.
+  /// @param token The collateral token address.
+  /// @param amount The amount to withdraw.
+  function emergencyWithdraw(address token, uint256 amount) public override {
+    if (msg.sender != owner() && msg.sender != queue) {
+      revert NotAllowed();
+    }
+
+    IERC20(token).safeTransfer(msg.sender, amount);
+  }
+
   /// @dev See {IERC4626-maxDeposit}. Returns 0 if paused.
   function maxDeposit(address _who) public view override returns (uint256) {
     return paused() ? 0 : super.maxDeposit(_who);

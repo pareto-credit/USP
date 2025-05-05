@@ -15,4 +15,9 @@ interface IIdleCDOEpochVariant {
   function expectedEpochInterest() external view returns (uint256);
   function isEpochRunning() external view returns (bool);
   function defaulted() external view returns (bool);
+  function getContractValue() external view returns (uint256);
+  function depositAA(uint256 amount) external returns (uint256);
+  function requestWithdraw(uint256 tranches, address tranche) external;
+  function owner() external view returns (address);
+  function setKeyringParams(address _keyring, uint256 policy, bool) external;
 }

@@ -86,7 +86,7 @@ contract EmergencyUtils is OwnableUpgradeable, PausableUpgradeable, AccessContro
   /// @notice Emergency function for the owner to withdraw collateral tokens.
   /// @param token The collateral token address.
   /// @param amount The amount to withdraw.
-  function emergencyWithdraw(address token, uint256 amount) external {
+  function emergencyWithdraw(address token, uint256 amount) public virtual {
     _checkOwner();
     IERC20(token).safeTransfer(msg.sender, amount);
   }

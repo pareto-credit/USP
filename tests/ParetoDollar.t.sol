@@ -172,7 +172,7 @@ contract TestParetoDollar is Test, DeployScript {
   }
 
   function testEmergencyBurn() external {
-    vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, address(this)));
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollar.NotAllowed.selector));
     par.emergencyBurn(1e18);
 
     address owner = par.owner();
@@ -190,6 +190,17 @@ contract TestParetoDollar is Test, DeployScript {
 
     assertEq(par.totalSupply(), 1e18 / 2, 'totalSupply is wrong');
     assertEq(par.balanceOf(owner), 1e18 / 2, 'balanceOf owner is wrong after burn');
+
+    vm.startPrank(address(queue));
+    deal(USDC, address(queue), 1e6);
+    IERC20Metadata(USDC).approve(address(par), 1e6);
+    par.mint(USDC, 1e6);
+    // burn
+    par.emergencyBurn(1e18 / 2);
+    vm.stopPrank();
+
+    assertEq(par.totalSupply(), 1e18, 'totalSupply is wrong after queue burn');
+    assertEq(par.balanceOf(owner), 1e18 / 2, 'balanceOf owner is wrong after queue burn');
   }
 
   function testPause() external {
