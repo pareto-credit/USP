@@ -1047,6 +1047,65 @@ contract TestParetoDollarQueue is Test, DeployScript {
     );
   }
 
+  function testCVDefault() external {
+    // set sPar fees to 0 to ease calculations
+    vm.startPrank(sPar.owner());
+    sPar.updateFeeParams(0, address(1));
+    vm.stopPrank();
+
+    // deposit 10M USDC in the ParetoDollar
+    uint256 amount = 10_000_000e6;
+    uint256 depositedAmountScaled = 10_000_000 * 1e18;
+    _mintUSP(address(this), USDC, amount);
+    // we stake only 1M
+    _stake(address(this), depositedAmountScaled / 10);    // deposit funds in CV
+    _depositFundsCV(FAS_USDC_CV, amount);
+
+    uint256 collateralValue = queue.getTotalCollateralsScaled();
+
+    vm.startPrank(queue.owner());
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.YieldSourceNotEmpty.selector));
+    queue.removeYieldSource(FAS_USDC_CV);
+    vm.stopPrank();
+
+    _defaultCV(FAS_USDC_CV);
+
+    uint256 yieldSourcesLenPre = queue.getAllYieldSources().length; 
+    vm.prank(queue.owner());
+    queue.removeYieldSource(FAS_USDC_CV);
+
+    assertEq(queue.getAllYieldSources().length, yieldSourcesLenPre - 1, 'Yield source was not removed from array');
+    (IERC20Metadata sourceToken, address sourceSource, , , , ) = queue.yieldSources(FAS_USDC_CV);
+
+    assertEq(sourceSource, address(0), 'Yield source was not removed');
+
+    assertLt(queue.getTotalCollateralsScaled(), collateralValue, 'total collaterals should be updated');
+  }
+
+  function _defaultCV(address source) internal {
+    IIdleCDOEpochVariant _vault = IIdleCDOEpochVariant(address(source));
+    vm.prank(_vault.owner());
+    _vault.setKeyringParams(address(0), 1, false);
+    // deposit and request redeem from CV
+    uint256 amount = 1_000_000e6;
+    _donate(USDC, address(this), amount);
+    IERC20Metadata(USDC).approve(address(_vault), amount);
+    uint256 tranches = _vault.depositAA(amount);
+    _vault.requestWithdraw(tranches, _vault.AATranche());
+
+    // start epoch
+    _toggleEpochCV(source, true);
+
+    // stop epoch without repaying debt
+    IIdleCreditVault strategy = IIdleCreditVault(_vault.strategy());
+    address _owner = IIdleCreditVault(_vault.strategy()).manager();
+    vm.warp(_vault.epochEndDate() + 1);
+    vm.startPrank(_owner);
+    _vault.stopEpoch(strategy.unscaledApr(), 0);
+    vm.stopPrank();
+    assertEq(_vault.defaulted(), true, 'borrower should be defaulted');
+  }
+
   function testAccountLossesLossCovered() external {
     vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, address(this), queue.MANAGER_ROLE()));
     queue.accountGainsLosses();

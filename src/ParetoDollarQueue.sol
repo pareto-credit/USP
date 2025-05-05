@@ -622,8 +622,10 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     if (address(_ys.source) == address(0)) {
       revert YieldSourceInvalid();
     }
+    bool defaulted = _ys.vaultType == 1 && IIdleCDOEpochVariant(_source).defaulted();
     // revert if the yield source is not empty, no need to unscale the value
-    if (getCollateralsYieldSourceScaled(_source) > 0) {
+    // if yield source is a defaulted credit vault we skip this check
+    if (getCollateralsYieldSourceScaled(_source) > 0 && !defaulted) {
       revert YieldSourceNotEmpty();
     }
     // remove allowance for the yield source
