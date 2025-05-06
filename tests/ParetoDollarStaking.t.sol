@@ -172,6 +172,23 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(balPost, balPre + depositAmount, 'Balance should reflect the deposit amount');
   }
 
+  function testRedeemSystemUncollateralized() external {
+    uint256 depositAmount = 10e18;
+    _mintUSP(address(this), USDS, depositAmount);
+    par.approve(address(sPar), depositAmount);
+    sPar.deposit(depositAmount, address(this));
+
+    // create a loss
+    vm.startPrank(address(queue));
+    IERC20Metadata(USDS).safeTransfer(address(2), depositAmount / 2);
+    vm.stopPrank();
+    assertEq(queue.isParetoDollarCollateralized(), false, 'ParetoDollar should be uncollateralized');
+
+    // stakers cannot redeem
+    vm.expectRevert(abi.encodeWithSelector(ERC4626Upgradeable.ERC4626ExceededMaxRedeem.selector, address(this), depositAmount, 0));
+    sPar.redeem(depositAmount, address(this), address(this));
+  }
+
   function testRedeemWithInterest() external {
     uint256 depositAmount = 1e18;
     uint256 shares = _stake(address(this), depositAmount);
@@ -367,5 +384,17 @@ contract TestParetoDollarStaking is Test, DeployScript {
     deal(_token, address(1), _amount);
     vm.prank(address(1));
     IERC20Metadata(_token).safeTransfer(_who, _amount);
+  }
+
+  function _mintUSP(address _user, address _collateral, uint256 _amount) internal returns (uint256 mintedAmount) {
+    // allow anyone to mint
+    vm.prank(par.owner());
+    par.setKeyringParams(address(0), 1);
+    // mint USP
+    deal(_collateral, _user, _amount);
+    vm.startPrank(_user);
+    IERC20Metadata(_collateral).safeIncreaseAllowance(address(par), _amount);
+    mintedAmount = par.mint(_collateral, _amount);
+    vm.stopPrank(); 
   }
 }

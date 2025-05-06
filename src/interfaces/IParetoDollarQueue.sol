@@ -60,4 +60,5 @@ interface IParetoDollarQueue {
     uint8 _vaultType
   ) external;
   function removeYieldSource(address _source) external;
+  function isParetoDollarCollateralized() external view returns (bool);
 }

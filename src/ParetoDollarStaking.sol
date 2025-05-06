@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "./EmergencyUtils.sol";
+import "./interfaces/IParetoDollarQueue.sol";
 
 /* 
 
@@ -110,9 +111,12 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
   }
 
   /// @dev See {ERC4626Upgradeable-_withdraw}.
-  /// @dev if paused, withdraws are not allowed
+  /// @dev if paused or not collateralized, withdraws are not allowed
   function _withdraw(address caller, address receiver, address _owner, uint256 assets, uint256 shares) internal override {
     _requireNotPaused();
+    if (!IParetoDollarQueue(queue).isParetoDollarCollateralized()) {
+      revert NotAllowed();
+    }
     super._withdraw(caller, receiver, _owner, assets, shares);
   }
 
@@ -225,13 +229,13 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
     return paused() ? 0 : super.maxMint(_who);
   }
 
-  /// @dev See {IERC4626-maxWithdraw}. Returns 0 if paused.
+  /// @dev See {IERC4626-maxWithdraw}. Returns 0 if paused or system uncollateralized.
   function maxWithdraw(address _who) public view override returns (uint256) {
-    return paused() ? 0 : super.maxWithdraw(_who);
+    return paused() || !IParetoDollarQueue(queue).isParetoDollarCollateralized() ? 0 : super.maxWithdraw(_who);
   }
 
-  /// @dev See {IERC4626-maxRedeem}. Returns 0 if paused.
+  /// @dev See {IERC4626-maxRedeem}. Returns 0 if paused or system uncollateralized.
   function maxRedeem(address _who) public view override returns (uint256) {
-    return paused() ? 0 : balanceOf(_who);
+    return paused() || !IParetoDollarQueue(queue).isParetoDollarCollateralized() ? 0 : balanceOf(_who);
   }
 }
