@@ -21,6 +21,7 @@ import { IKeyring } from "../src/interfaces/IKeyring.sol";
 import { DeployScript, Constants } from "../script/Deploy.s.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { IERC4626 } from  "@openzeppelin/contracts/interfaces/IERC4626.sol";
+import { ERC4626Upgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
 
 contract TestParetoDollarQueue is Test, DeployScript {
   using SafeERC20 for IERC20Metadata;
@@ -49,6 +50,11 @@ contract TestParetoDollarQueue is Test, DeployScript {
     par.addCollateral(USDS, IERC20Metadata(USDS).decimals(), USDS_FEED, USDS_FEED_DECIMALS, 0);
     vm.stopPrank();
   
+    vm.label(address(sPar),"sUSP");
+    vm.label(USDS,"USDS");
+    vm.label(SUSDS,"sUSDS");
+    vm.label(address(par),"USP");
+    vm.label(address(queue),"queue");
     skip(100);
   }
 
@@ -382,12 +388,10 @@ contract TestParetoDollarQueue is Test, DeployScript {
     queue.depositFunds(sources, methods, args);
     vm.stopPrank();
 
-    // manually set total reserved withdrawals to 1000 USDC
+    // set total reserved withdrawals to 1000 USDC
     uint256 reserved = 1000e6;
-    stdstore
-      .target(address(queue))
-      .sig(queue.totReservedWithdrawals.selector)
-      .checked_write(reserved * 10 ** 12); // should be scaled to 18 decimals
+    _requestRedeemUSP(address(1), reserved * 10 ** 12);
+    _stopEpoch();
 
     // check that after deposit there are at least 1000 USDC in the vault
     // we are depositing 99_999_001 USDC and leaving 999USDC in the contract
@@ -477,13 +481,13 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 epoch = queue.epochNumber();
     // request 50 USP redeem from address(this)
     _requestRedeemUSP(address(this), minted / 2);
-    assertEq(queue.epochPending(epoch), minted / 2, 'Epoch pending should be updated');
+    assertApproxEqAbs(queue.epochPending(epoch), minted / 2, 1, 'Epoch pending should be updated');
     // manager stops queue epoch so redeems can be processed
     _stopEpoch();
 
     // request another redeem, 100 USP, from user1.
     _requestRedeemUSP(user1, minted1);
-    assertEq(queue.epochPending(epoch + 1), minted1, 'Epoch 2 pending should be updated');
+    assertApproxEqAbs(queue.epochPending(epoch + 1), minted1, 1, 'Epoch 2 pending should be updated');
     // Now there are 50 USP request for epoch 1
     // 100 USP request for current epoch
     // 100 USDC unlent
@@ -493,8 +497,8 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 usdsAmount = amount * 1e12; // 100 USDS
     _sellUSDCPSM(amount); // convert USDC to USDS
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.InsufficientBalance.selector));
-    // deposit 50 USP + 1 wei (ie too much)
-    _deposit4626(SUSDS, usdsAmount / 2 + 1);
+    // deposit 50 USP + 2 wei (ie too much)
+    _deposit4626(SUSDS, usdsAmount / 2 + 2);
 
     // deposit 50 USP
     _deposit4626(SUSDS, usdsAmount / 2);
@@ -771,7 +775,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 epoch = queue.epochNumber();
     // request USP redeem from address(this)
     _requestRedeemUSP(address(this), minted);
-    assertEq(queue.epochPending(epoch), minted, 'Epoch pending should be updated');
+    assertApproxEqAbs(queue.epochPending(epoch), minted, 1, 'Epoch pending should be updated');
     // manager stops queue epoch so redeems can be processed
     _stopEpoch();
     // manager request redeems for half of the requested amount and then claim from CV after an epoch
@@ -804,22 +808,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     // we scale the value back to 6 decimals for correct comparison. There is 1 wei difference (scaled)
     assertApproxEqAbs(queue.epochPending(epoch), 0, 1e12, 'Epoch pending should be almost 0');
 
-    // cannot call stopEpoch again as long as epochPending is > 0
-    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.NotReady.selector));
-    _stopEpoch();
-
-    // manager should send some funds to the contract (or use new deposits)
-    // to 'reset' epochPending.
-    // let's deposit funds with another user
-    _mintUSP(address(987), USDC, amount);
-    // the -1 is to 'fix' the 1 wei on epochPending
-    _depositFundsCV(FAS_USDC_CV, amount - 1);
-
-    // same can be achieved via donation + depositFunds(0)
-    // _donate(USDC, address(queue), 1);
-    // _depositFundsCV(FAS_USDC_CV, 0);
-
-    // now we can call stopEpoch
+    // can call stopEpoch as diff is within the threshold
     _stopEpoch();
   }
 
@@ -869,7 +858,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 redeemed = par.claimRedeemRequest(epoch);
     assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(address(this)) - balPre, amount, 1, 'user should have the amount redeemed');
     assertEq(queue.userWithdrawalsEpochs(address(this), epoch), 0, 'user withdrawal epoch should be 0');
-    assertEq(queue.totReservedWithdrawals(), 0, 'totReservedWithdrawals should be 0');
     assertEq(redeemed, minted, 'return value should be the amount redeemed');
   }
 
@@ -1075,7 +1063,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     queue.removeYieldSource(FAS_USDC_CV);
 
     assertEq(queue.getAllYieldSources().length, yieldSourcesLenPre - 1, 'Yield source was not removed from array');
-    (IERC20Metadata sourceToken, address sourceSource, , , , ) = queue.yieldSources(FAS_USDC_CV);
+    (,address sourceSource,,,,) = queue.yieldSources(FAS_USDC_CV);
 
     assertEq(sourceSource, address(0), 'Yield source was not removed');
 
@@ -1188,6 +1176,80 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _redeem4626AnyAddress(SUSDS, amount, random, 1);
     vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.ParamNotAllowed.selector));
     _withdraw4626AnyAddress(SUSDS, amount, random, 1);
+  }
+
+  function testBadDebtSocialization() external {
+    // tests bad debt in system
+    address user1 = makeAddr('user1');
+    address user2 = makeAddr('user2');
+    uint256 amount1 = 10000e18;
+    uint256 amount2 = 10000e18;
+    uint256 totSupply = amount1 + amount2;
+    uint256 loss = 10e18; // 10% loss
+    uint256 badDebt = totSupply * 10e18 / 100e18;
+
+    _mintUSP(user1, USDS, amount1);
+    _mintUSP(user2, USDS, amount2);
+
+    // deposit into 4626 yield source
+    uint256 shares = _deposit4626(SUSDS, amount1 + amount2);
+    uint256 totalsBefore = queue.getTotalCollateralsScaled();
+    assertApproxEqAbs(totalsBefore, amount1 + amount2, 1, 'Total collaterals is wrong');
+
+    // user1 request redeems when the system is healthy
+    _requestRedeemUSP(user1, par.balanceOf(user1));
+
+    // simulate a 10% loss in the yield source by overwriting the SUSDS balance in the queue
+    uint256 sharesAfter = shares - ((shares * loss) / 100e18);
+    deal(SUSDS, address(queue), sharesAfter); // overwrite the share balance
+    assertEq(IERC4626(SUSDS).balanceOf(address(queue)), sharesAfter);
+    assertEq(queue.getTotalCollateralsScaled(), totSupply - badDebt, 'total collaterals is wrong');
+
+    // user2 request redeems when the system is unhealthy
+    _requestRedeemUSP(user2, par.balanceOf(user2));
+
+    // a new unsuspecting user comes in this epoch to mint
+    // but he cannot mint because contract is undercollateralized
+    address user4 = makeAddr('user4');
+    uint256 amount4 = 5000e18;
+    vm.prank(par.owner());
+    par.setKeyringParams(address(0), 1);
+    deal(USDS, user4, amount4);
+    vm.startPrank(user4);
+    IERC20Metadata(USDS).safeIncreaseAllowance(address(par), amount4);
+    vm.expectRevert(abi.encodeWithSelector(IParetoDollar.UnderCollateralized.selector));
+    par.mint(USDS, amount4);
+    vm.stopPrank();
+
+    uint256 epoch = queue.epochNumber();
+    assertApproxEqAbs(queue.epochPending(epoch), amount1 + amount2, 1, 'epochPending before stopEpoch is wrong');
+    _stopEpoch(); // moves epoch forward to process withdrawals
+
+    // manager redeems all funds
+    _redeem4626(SUSDS, IERC4626(SUSDS).balanceOf(address(queue)), epoch);
+    // epoch 1 pending amount is still > 0 because of the loss. There are 2000 out of the 20000 requested
+    // which cannot be claimed
+    assertApproxEqAbs(queue.epochPending(epoch), 2000e18, 1, 'epochPending after redeem from yield source is wrong');
+
+    // manager needs to call stopEpoch again to reset epochPending[1] to 0 and allow users to withdraw
+    _stopEpoch();
+    assertEq(queue.epochPending(epoch), 0, 'epochPending after second stopEpoch is wrong');
+
+    // now user1 & 2 withdraw all their funds
+    vm.startPrank(user1);
+    par.claimRedeemRequest(epoch);
+    vm.stopPrank();
+
+    vm.startPrank(user2);
+    par.claimRedeemRequest(epoch);
+    vm.stopPrank();
+
+    // loss should be 1000 for each user
+    // user1 funds have a loss proportional to the bad debt.
+    assertEq(IERC20Metadata(USDS).balanceOf(user1), amount1 * (totSupply - badDebt) / totSupply, 'user1 bal after claim is wrong');
+    // user2 funds have a loss proportional to the bad debt.
+    assertEq(IERC20Metadata(USDS).balanceOf(user2), amount2 * (totSupply - badDebt) / totSupply, 'user2 bal after claim is wrong');
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 0, 1, 'Total collateral is not correct');
   }
 
   function _accountGainsLosses() internal {

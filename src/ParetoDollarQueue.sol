@@ -41,6 +41,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
 
   /// @notice role allowed to move funds out of the contract
   bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+  /// @notice threshold for collateralization check and for processing epochs
+  uint256 public constant THRESHOLD = 1e18;
 
   /////////////////////////
   /// Storage variables ///
@@ -58,7 +60,9 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   mapping(address => mapping (uint256 => uint256)) public userWithdrawalsEpochs;
   /// @notice mapping of pending withdrawals (ParetoDollars) per epoch 
   mapping(uint256 => uint256) public epochPending;
-  /// @notice total amount of ParetoDollar reserved for withdrawals and not yet redeemed
+  /// @notice total amount of USP burned for withdrawals and not yet redeemed
+  /// this values is equal to the amount of collaterals requested by the user 
+  /// only when the system is fully collateralized
   uint256 public totReservedWithdrawals;
   /// @notice current epoch number used to group redeem requests
   uint256 public epochNumber;
@@ -171,6 +175,13 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     // if vaultType is not one supported we skip it and return 0
   }
 
+  /// @notice Check if ParetoDollar is fully collateralized (with a threshold)
+  /// @return True if ParetoDollar is fully collateralized, false otherwise.
+  function isParetoDollarCollateralized() public view returns (bool) {
+    // we add a THRESHOLD to the total amount of collaterals to account for small differences of up to 1 USP
+    return getTotalCollateralsScaled() + THRESHOLD >= _parSupply();
+  }
+
   //////////////////////////
   /// Internal functions ///
   //////////////////////////
@@ -277,6 +288,12 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     revert NotAllowed();
   }
 
+  /// @notice Get the ParetoDollar total supply (including burned and not yet redeemed).
+  /// @return The total supply of ParetoDollar.
+  function _parSupply() internal view returns (uint256) {
+    return IERC20Metadata(address(par)).totalSupply() + totReservedWithdrawals;
+  }
+
   ///////////////////////////
   /// Protected functions ///
   ///////////////////////////
@@ -296,7 +313,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     userWithdrawalsEpochs[_receiver][_epoch] += _amount;
     // update pending withdraw requests
     epochPending[_epoch] += _amount;
-    // update total amount reserved for withdrawals
+    // update total amount of USP burned and not yet claimed
     totReservedWithdrawals += _amount;
   }
 
@@ -330,6 +347,14 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     uint256 _collateralAmount;
     uint256 _collateralDecimals;
     uint256 _amountLeft = amount;
+
+    if (!isParetoDollarCollateralized()) {
+      // if the system is not collateralized we need to scale the amount to transfer
+      // to the amount of collaterals available. So we retrieve the amount of USP user requested
+      // and scale it to the amount of collaterals available
+      _amountLeft = amount * getTotalCollateralsScaled() / _parSupply();
+    }
+
     uint256 _collateralToTransfer;
     IERC20Metadata _collateralToken;
     // loop through the collaterals and transfer them to the user up to the USP amount requested
@@ -427,15 +452,25 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   }
 
   /// @notice Increment the epoch number so to freeze the amount of pending requests.
-  /// @dev only the manager can call this function, requests of the prev epoch should be processed
+  /// @dev only the manager can call this function, requests of the prev epoch should be processed.
+  ///      Manager should ensure to redeem everything if the system is not collateralized.
   function stopEpoch() external {
     // revert if the caller is not the manager
     _checkRole(MANAGER_ROLE);
 
-    // check that request from previous epoch were processed
     uint256 _currEpoch = epochNumber;
-    if (epochPending[_currEpoch - 1] > 0) {
+    bool isCollateralized = isParetoDollarCollateralized();
+    // check that request from previous epoch were processed (with a threshold to account for rounding issues)
+    // and that the system is still collateralized
+    if (epochPending[_currEpoch - 1] > THRESHOLD && isCollateralized) {
       revert NotReady();
+    }
+
+    // If ParetoDollar is not fully collateralized we need to reset the epochPending
+    // to allow users who requested withdrawals to redeem a proportional share of their funds
+    // The manager should manually redeem all funds as epochPending becomes 'meaningless'
+    if (!isCollateralized) {
+      epochPending[_currEpoch - 1] = 0;
     }
 
     // update epoch number
@@ -451,14 +486,10 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     // revert if the caller is not the manager
     _checkRole(MANAGER_ROLE);
 
-    // We first fetch total ParetoDollar supply and add the total amount of reserved withdrawals
-    // which are ParetoDollars already burned but not yet claimed
-    address _par = address(par);
-    uint256 parSupply = IERC20Metadata(_par).totalSupply() + totReservedWithdrawals;
     // we calculate the total amount of collaterals available scaled to 18 decimals
     uint256 totCollaterals = getTotalCollateralsScaled();
     // calculate the gain/loss
-    int256 gain = int256(totCollaterals) - int256(parSupply);
+    int256 gain = int256(totCollaterals) - int256(_parSupply());
     if (gain > 0) {
       // mint ParetoDollar to this contract equal to the gain
       par.mintForQueue(uint256(gain));
@@ -473,7 +504,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
       // we need to check if supply is enough to cover the whole loss
       uint256 sParSupply = IERC20Metadata(address(sPar)).totalSupply();
       uint256 burnAmount = uint256(-gain) > sParSupply ? sParSupply : uint256(-gain);
-      sPar.emergencyWithdraw(_par, burnAmount);
+      sPar.emergencyWithdraw(address(par), burnAmount);
       par.emergencyBurn(burnAmount);
     }
   }
@@ -496,6 +527,10 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     _requireNotPaused();
     // revert if the caller is not the manager
     _checkRole(MANAGER_ROLE);
+    // revert if the contract is not collateralized
+    if (!isParetoDollarCollateralized()) {
+      revert NotAllowed();
+    }
 
     uint256 _vaultsLen = _sources.length;
     // check if the vaults and methods are the same length, check also if arguments have the same length
