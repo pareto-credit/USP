@@ -127,19 +127,16 @@ contract TestParetoDollar is Test, DeployScript {
 
     IParetoDollar.CollateralInfo memory usdcCollateral = par.getCollateralInfo(USDC);
     assertEq(usdcCollateral.allowed, false, 'USDC should not be allowed');
-    assertEq(usdcCollateral.priceFeed, address(0), 'USDC feed should not be removed');
-    assertEq(usdcCollateral.tokenDecimals, 0, 'USDC tokenDecimals should not be removed');
-    assertEq(usdcCollateral.priceFeedDecimals, 0, 'USDC priceFeedDecimals should not be removed');
-    assertEq(usdcCollateral.validityPeriod, 0, 'USDC validityPeriod should not be removed');
 
     vm.expectRevert(IParetoDollar.InvalidData.selector);
     par.removeCollateral(address(0));
     vm.stopPrank();
 
     address[] memory collaterals = par.getCollaterals();
-    assertEq(collaterals.length, 2, 'There should be 1 collateral');
-    assertEq(collaterals[0], USDS, 'First collateral address in getCollaterals should be USDS');
+    assertEq(collaterals.length, 3, 'There should be 3 collaterals');
+    assertEq(collaterals[0], USDC, 'First collateral address in getCollaterals should be USDC');
     assertEq(collaterals[1], USDT, 'Second collateral address in getCollaterals should be USDT');
+    assertEq(collaterals[2], USDS, 'Third collateral address in getCollaterals should be USDS');
   }
 
   function testSetKeyringParams() external {

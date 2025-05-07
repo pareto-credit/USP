@@ -243,26 +243,14 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     emit CollateralAdded(token, priceFeed, tokenDecimals, priceFeedDecimals, validityPeriod);
   }
 
-  /// @notice Remove collateral
-  /// @dev Collateral should be removed only if there are no yield sources using it anymore
-  /// and all redeem requests for that collateral have been fulfilled.
+  /// @notice Disable collateral for minting
   /// @param token The collateral token address to remove.
   function removeCollateral(address token) external {
     _checkOwner();
 
     if (token == address(0)) revert InvalidData();
-    delete collateralInfo[token];
-    // remove the token from the list of collaterals
-    // order is not preserved but it's not important (last el can be reallocated)
-    address[] memory _collaterals = collaterals;
-    uint256 collateralsLen = _collaterals.length;
-    for (uint256 i = 0; i < collateralsLen; i++) {
-      if (_collaterals[i] == token) {
-        collaterals[i] = _collaterals[collateralsLen - 1];
-        collaterals.pop();
-        break;
-      }
-    }
+    CollateralInfo storage info = collateralInfo[token];
+    info.allowed = false;
     emit CollateralRemoved(token);
   }
 
