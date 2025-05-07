@@ -15,6 +15,7 @@ interface IParetoDollarQueue {
   error InsufficientBalance();
   error MaxCap();
   error ParamNotAllowed();
+  error PSMFeesNotZero();
 
   //////////////
   /// Events ///
