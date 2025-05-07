@@ -348,6 +348,41 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(par.balanceOf(par.owner()), 0, 'owner should have no balance');
   }
 
+  function testLossMgmtWithUnvestedRewards() external {
+    // set fees to 0
+    vm.prank(sPar.owner());
+    sPar.updateFeeParams(0, address(this));
+
+    uint256 depositAmount = 1e18; // 1 USP (which has 18 decimals)
+    uint256 loss = depositAmount / 2; // 0.5 USP
+    uint256 rewards = depositAmount; // 1 USP
+
+    _mintUSP(address(this), 1e6); // 1 USDC
+    _stake(address(this), depositAmount);
+
+    // deposit some rewards > than the loss
+    depositRewards(rewards);
+    // totalAssets is now 2 USP
+
+    uint256 pricePre = sPar.convertToAssets(1e18);
+    vm.startPrank(sPar.owner());
+    sPar.emergencyWithdraw(address(par), loss);
+    vm.stopPrank();
+    // totalAssets is now 1.5 USP
+
+    assertEq(sPar.convertToAssets(1e18), pricePre, 'sPar price should be the same');
+    assertEq(sPar.rewards(), rewards - loss, 'Unvested rewards should be reduced by the loss');
+
+    // we now have another loss > than the rewards
+    vm.startPrank(sPar.owner());
+    sPar.emergencyWithdraw(address(par), loss * 2);
+    vm.stopPrank();
+    // totalAssets is now 0.5 USP
+
+    assertEq(sPar.convertToAssets(1e18), depositAmount / 2, 'sPar price should be halved');
+    assertEq(sPar.rewards(), 0, 'Unvested rewards should be 0');
+  }
+
   function _mintUSP(address _who, uint256 _amount) internal {
     vm.prank(par.owner());
     par.setKeyringParams(address(0), 1);
