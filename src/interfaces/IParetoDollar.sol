@@ -8,6 +8,7 @@ interface IParetoDollar {
   error InvalidData();
   error AlreadyInitialized();
   error NotAllowed();
+  error UnderCollateralized();
 
   event CollateralAdded(
     address indexed token,

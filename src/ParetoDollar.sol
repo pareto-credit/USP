@@ -102,6 +102,10 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     if (getOraclePrice(collateralToken) < MIN_PRICE) {
       revert CollateralPriceBelowThreshold();      
     }
+    // check if ParetoDollar is fully collateralized
+    if (!queue.isParetoDollarCollateralized()) {
+      revert UnderCollateralized();
+    }
 
     // mint ParetoDollars
     scaledAmount = amount * 10 ** (18 - info.tokenDecimals);
