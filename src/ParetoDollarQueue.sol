@@ -9,6 +9,7 @@ import "./interfaces/IParetoDollarStaking.sol";
 import "./interfaces/IParetoDollarQueue.sol";
 import "./interfaces/IIdleCDOEpochVariant.sol";
 import "./interfaces/IIdleCreditVault.sol";
+import "./interfaces/IPSM.sol";
 import "./EmergencyUtils.sol";
 import "./Constants.sol";
 
@@ -258,6 +259,10 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     if (_method == BUY_GEM_SIG || _method == SELL_GEM_SIG) {
       // first param should be address(this) for interactions with USDS_USDC_PSM
       (_receiver,) = abi.decode(_args, (address, uint256));
+      IPSM psm = IPSM(USDS_USDC_PSM);
+      if (psm.tin() != 0 || psm.tout() != 0) {
+        revert PSMFeesNotZero();
+      }
     } else if (_method == DEPOSIT_4626_SIG) {
       // second param should be address(this) for deposits in 4626 vaults
       (,_receiver) = abi.decode(_args, (uint256, address));
