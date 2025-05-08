@@ -40,7 +40,6 @@ interface IParetoDollarQueue {
     address source; // address of the yield source
     address vaultToken; // token used by the vault
     uint256 maxCap; // maximum amount that can be deposited in the vault (interest is not included)
-    uint256 depositedAmount; // amount deposited in the vault (interest is not included)
     Method[] allowedMethods; // allowed methods to call on the vault
     uint8 vaultType; // type of the vault (1 = Pareto Credit Vault, 2 = ERC4626)
   }
