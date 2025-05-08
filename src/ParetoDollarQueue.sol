@@ -43,7 +43,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   /// @notice role allowed to move funds out of the contract
   bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
   /// @notice threshold for collateralization check and for processing epochs
-  uint256 public constant THRESHOLD = 1e18;
+  /// value is set to 1000 wei of a token with 6 decimals, scaled to 18
+  uint256 public constant THRESHOLD = 1000 * 1e12;
 
   /////////////////////////
   /// Storage variables ///
@@ -67,6 +68,8 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   uint256 public totReservedWithdrawals;
   /// @notice current epoch number used to group redeem requests
   uint256 public epochNumber;
+  /// @notice total amount of collaterals requested from Credit Vaults (scaled to 18 decimals)
+  uint256 public totCreditVaultsRequestedScaled;
   
   //////////////////////////
   /// Initialize methods ///
@@ -179,7 +182,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   /// @notice Check if ParetoDollar is fully collateralized (with a threshold)
   /// @return True if ParetoDollar is fully collateralized, false otherwise.
   function isParetoDollarCollateralized() public view returns (bool) {
-    // we add a THRESHOLD to the total amount of collaterals to account for small differences of up to 1 USP
+    // we add a THRESHOLD to the total amount of collaterals to account for small differences
     return getTotalCollateralsScaled() + THRESHOLD >= _parSupply();
   }
 
@@ -269,6 +272,14 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     } else if (_method == WITHDRAW_4626_SIG || _method == REDEEM_4626_SIG) {
       // second param should be address(this) for redeem/withdraw from 4626 vaults
       (,_receiver,) = abi.decode(_args, (uint256, address, address));
+    } else if (_method == WITHDRAW_AA_SIG) {
+      // Pareto Credit vaults withdraw request does not allow to specify a receiver address
+      // here instead we decode the amount requested and add it to the total CVs requested amount
+      IIdleCDOEpochVariant _cv = IIdleCDOEpochVariant(_target);
+      (uint256 _amount,) = abi.decode(_args, (uint256, address));
+      // we consider the requested amount at the current value. When redeemed the amount will be greater
+      // due to interest accrued in the last epoch. Value is scaled to 18 decimals
+      totCreditVaultsRequestedScaled += _amount * _cv.virtualPrice(_cv.AATranche()) / _cv.oneToken();
     }
     if (_receiver != address(this)) {
       revert ParamNotAllowed();
@@ -332,9 +343,9 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     // revert if not called by the ParetoDollar contract
     _onlyPar();
 
-    // check if withdraw requests were processed for the epoch
+    // check if withdraw requests were processed for the epoch (with a threshold)
     // and if epoch is >= of the current epoch
-    if (epochPending[_epoch] != 0 || _epoch > epochNumber - 1) {
+    if (epochPending[_epoch] > THRESHOLD || _epoch > epochNumber - 1) {
       revert NotReady();
     }
 
@@ -380,8 +391,9 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
         _collateralToken.safeTransfer(_receiver, _collateralToTransfer / (10 ** (18 - _collateralDecimals)));
       }
     }
-    // check if the amount left to transfer is greater than 0
-    if (_amountLeft > 0) {
+
+    // check if the amount left to transfer is greater than the threshold
+    if (_amountLeft > THRESHOLD) {
       revert InsufficientBalance();
     }
     // update the total amount reserved for withdrawals
@@ -431,13 +443,19 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
       _externalCall(source, _methods[i], _args[i]);
       // calculate redeemed amount
       redeemed = _yieldSource.token.balanceOf(address(this)) - balPre;
-      // update the depositedAmount in storage
-      yieldSources[source].depositedAmount = getCollateralsYieldSourceScaled(source) / (10 ** (18 - _yieldSource.token.decimals()));
       if (redeemed > 0) {
-        if (_epochPending > 0) {
-          totRedeemedScaled += redeemed * (10 ** (18 - _yieldSource.token.decimals()));
-        }
         emit YieldSourceRedeem(source, address(_yieldSource.token), redeemed);
+        // scale the redeemed amount to 18 decimals
+        redeemed = redeemed * (10 ** (18 - _yieldSource.token.decimals()));
+        if (_epochPending > 0) {
+          totRedeemedScaled += redeemed;
+        }
+        // if we are claiming a withdraw request from a CV we remove the redeemed amount (scaled)
+        // from total amount of CVs requested
+        if (_methods[i] == CLAIM_REQ_SIG || _methods[i] == CLAIM_INSTANT_REQ_SIG) {
+          uint256 _totCVReq = totCreditVaultsRequestedScaled;
+          totCreditVaultsRequestedScaled = _totCVReq > redeemed ? _totCVReq - redeemed : 0;
+        }
       }
     }
 
@@ -564,23 +582,25 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
       if (_yieldSource.maxCap > 0 && totDeposited > _yieldSource.maxCap) {
         revert MaxCap();
       }
-      // save the depositedAmount in storage
-      yieldSources[_sources[i]].depositedAmount = totDeposited;
 
       emit YieldSourceDeposit(_sources[i], address(_yieldSource.token), deposited);
     }
 
     uint256 _currEpoch = epochNumber;
-    // check if collaterals balances (scaled to 18 decimals) are greater than
-    // the totReservedWithdrawals minus the epochPending of the current epoch
-    if (getUnlentBalanceScaled() < totReservedWithdrawals - epochPending[_currEpoch]) {
+    // check if collaterals balances (scaled to 18 decimals) + the total amount requested from credit vaults
+    // are greater than the totReservedWithdrawals minus the epochPending of the current epoch, if yes we can deposit
+    uint256 unlent = getUnlentBalanceScaled();
+    if (unlent + totCreditVaultsRequestedScaled < totReservedWithdrawals - epochPending[_currEpoch]) {
       revert InsufficientBalance();
     }
 
     // if collateral balances are greater than the totReservedWithdrawals - epochPending
-    // for the curr epoch it means that all epochPending requests of the prev epoch can
+    // for the curr epoch (without counting the total requested from CVs but not yet
+    // redeemed) it means that all epochPending requests of the prev epoch can
     // be fulfilled so we can reset the epochPending for the prev closed epoch
-    epochPending[_currEpoch - 1] = 0;
+    if (unlent >= epochPending[_currEpoch - 1]) {
+      epochPending[_currEpoch - 1] = 0;
+    }
   }
 
   /// @notice Call multiple whitelisted methods on yield sources.
@@ -636,7 +656,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     if (_source == address(0) || _token == address(0) || _vaultToken == address(0) || _allowedMethods.length == 0) {
       revert Invalid();
     }
-    YieldSource memory _yieldSource = YieldSource(IERC20Metadata(_token), _source, _vaultToken, _maxCap, 0, _allowedMethods, _vaultType);
+    YieldSource memory _yieldSource = YieldSource(IERC20Metadata(_token), _source, _vaultToken, _maxCap, _allowedMethods, _vaultType);
     // add the token to the yield sources mapping
     yieldSources[_source] = _yieldSource;
     // add the token to the yield sources list
@@ -649,8 +669,7 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
 
   /// @notice Remove yield source.
   /// @dev only the owner can call this function. Yield source should be 
-  /// removed only when everything is withdrawn from it. This is checked
-  /// using `depositedAmount` in the yield source struct, if the yield
+  /// removed only when everything is withdrawn from it. If the yield
   /// source is not used with `depositFunds`/`redeemFunds` then this should
   /// be manually checked
   /// @param _source The address of the yield source.

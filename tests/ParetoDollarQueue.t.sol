@@ -82,7 +82,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(source.source, FAS_USDC_CV, 'source is wrong');
     assertEq(source.vaultToken, AA_FAS_USDC_CV, 'vault token is wrong');
     assertEq(source.maxCap, 100_000_000 * 1e6, 'vault max cap is wrong');
-    assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultType, 1, 'vault type deposited amount is wrong');
     assertEq(source.allowedMethods.length, 4, 'vault allowed methods is wrong');
     assertEq(source.allowedMethods[0].method, DEPOSIT_AA_SIG, 'first allowed method is wrong');
@@ -99,8 +98,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(sourceUSDS.source, SUSDS, 'source for USDS source is wrong');
     assertEq(sourceUSDS.vaultToken, SUSDS, 'vault token for USDS source is wrong');
     assertEq(sourceUSDS.maxCap, 100_000_000 * 1e18, 'vault max cap for USDS source is wrong');
-    assertEq(sourceUSDS.depositedAmount, 0, 'vault deposited amount for USDS source is wrong');
-    assertEq(sourceUSDS.vaultType, 2, 'vault type for USDS source deposited amount is wrong');
+    assertEq(sourceUSDS.vaultType, 2, 'vault type for USDS source is wrong');
     assertEq(sourceUSDS.allowedMethods.length, 3, 'vault allowed methods for USDS source is wrong');
     assertEq(sourceUSDS.allowedMethods[0].method, DEPOSIT_4626_SIG, 'first allowed method for USDS source is wrong');
     assertEq(sourceUSDS.allowedMethods[0].methodType, 0, 'first allowed method type for USDS source is wrong');
@@ -114,8 +112,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(sourcePSM.source, USDS_USDC_PSM, 'source for USDS PSM source is wrong');
     assertEq(sourcePSM.vaultToken, USDS, 'vault token for USDS PSM source is wrong');
     assertEq(sourcePSM.maxCap, 0, 'vault max cap for USDS PSM source is wrong');
-    assertEq(sourcePSM.depositedAmount, 0, 'vault deposited amount for USDS PSM source is wrong');
-    assertEq(sourcePSM.vaultType, 0, 'vault type for USDS PSM source deposited amount is wrong');
+    assertEq(sourcePSM.vaultType, 0, 'vault type for USDS PSM source is wrong');
     assertEq(sourcePSM.allowedMethods.length, 2, 'vault allowed methods for USDS PSM source is wrong');
     assertEq(sourcePSM.allowedMethods[0].method, BUY_GEM_SIG, 'first allowed method for USDS PSM source is wrong');
     assertEq(sourcePSM.allowedMethods[0].methodType, 1, 'first allowed method type for USDS PSM source is wrong');
@@ -239,7 +236,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(address(cdo));
     assertEq(address(source.token), USDC, 'vault token is wrong');
     assertEq(source.maxCap, 10, 'vault max cap is wrong');
-    assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultToken, cdo.AATranche(), 'vault token is wrong');
     assertEq(source.vaultType, 1, 'vault typer is wrong');
     assertEq(source.allowedMethods.length, 4, 'vault allowed methods is wrong');
@@ -274,7 +270,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
     assertEq(address(source.token), address(0), 'vault token should be removed');
     assertEq(source.maxCap, 0, 'vault max cap should be removed');
-    assertEq(source.depositedAmount, 0, 'vault deposited amount is wrong');
     assertEq(source.vaultToken, address(0), 'vault token is wrong');
     assertEq(source.vaultType, 0, 'vault type is wrong');
     assertEq(source.allowedMethods.length, 0, 'vault allowed methods should be removed');
@@ -312,7 +307,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     ParetoDollarQueue.YieldSource memory firstYieldSource = queue.getAllYieldSources()[0];
     assertEq(firstYieldSource.source, source1.source, 'The first yield source should be unchanged');
     assertEq(address(firstYieldSource.token), address(source1.token), 'The first yield source token should be unchanged');
-    (IERC20Metadata sourceToken, address sourceSource, , , , ) = queue.yieldSources(firstYieldSource.source);
+    (IERC20Metadata sourceToken, address sourceSource, , ,) = queue.yieldSources(firstYieldSource.source);
     assertEq(address(sourceToken), address(source1.token)); // Active source has the mapping for it deleted, data for it is deleted
     assertEq(address(sourceSource), address(source1.source)); // Active source has the mapping for it deleted, data for it is deleted
   }
@@ -373,7 +368,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     queue.depositFunds(sources, methods, args);
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
-    assertApproxEqAbs(source.depositedAmount, amount, 1, 'vault deposited amount is wrong');
     assertGt(IERC20Metadata(source.vaultToken).balanceOf(address(queue)), 0, 'vault balance should be greater than 0');
     assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), balPre - amount, 'queue token balance should be updated');
     vm.stopPrank();
@@ -457,8 +451,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
     ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
     ParetoDollarQueue.YieldSource memory sourceSUSDS = queue.getYieldSource(SUSDS);
-    assertApproxEqAbs(source.depositedAmount, amount, 1, 'vault deposited amount is wrong');
-    assertApproxEqAbs(sourceSUSDS.depositedAmount, usdsAmount, 1, 'vault deposited amount for SUSDS is wrong');
     assertGt(IERC20Metadata(source.vaultToken).balanceOf(address(queue)), 0, 'vault balance should be greater than 0');
     assertGt(IERC20Metadata(sourceSUSDS.vaultToken).balanceOf(address(queue)), 0, 'vault balance of USDS should be greater than 0');
     assertEq(IERC20Metadata(USDC).balanceOf(address(queue)), balPre - amount, 'queue token balance should be updated');
@@ -780,7 +772,6 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _stopEpoch();
     // manager request redeems for half of the requested amount and then claim from CV after an epoch
     _getFundsFromCV(FAS_USDC_CV, trancheAmount / 4, epoch);
-    assertApproxEqAbs(queue.getYieldSource(FAS_USDC_CV).depositedAmount, amount + amount / 2, 1, 'Vault deposited amount should be updated');
     // we scale the value back to 6 decimals for correct comparison
     assertApproxEqAbs(queue.epochPending(epoch), minted / 2, 1e12, 'Epoch pending should be halved');
 
@@ -844,14 +835,18 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _depositFundsCV(FAS_USDC_CV, 0);
     assertEq(queue.epochPending(epoch), 0, 'epoch pending should be eq to 0');
 
-    // we simulate a loss to trigger InsufficientBalance error
-    vm.prank(address(queue));
-    IERC20Metadata(USDC).safeTransfer(address(2), 1);
-    vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.InsufficientBalance.selector));
-    par.claimRedeemRequest(epoch);
-    // we give the token back to the contract 
-    vm.prank(address(2));
-    IERC20Metadata(USDC).safeTransfer(address(queue), 1);
+    // NOTE: if system is uncollateralized the funds for user are already reduced. This
+    // coupled with the addition of a THRESHOLD when claiming should never trigger an
+    // InsufficientBalance error
+
+    // // we simulate a loss to trigger InsufficientBalance error
+    // vm.prank(address(queue));
+    // IERC20Metadata(USDC).safeTransfer(address(2), 1);
+    // vm.expectRevert(abi.encodeWithSelector(IParetoDollarQueue.InsufficientBalance.selector));
+    // par.claimRedeemRequest(epoch);
+    // // we give the token back to the contract
+    // vm.prank(address(2));
+    // IERC20Metadata(USDC).safeTransfer(address(queue), 1);
 
     // claim the funds previously requested from CV
     uint256 balPre = IERC20Metadata(USDC).balanceOf(address(this));
@@ -1063,7 +1058,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     queue.removeYieldSource(FAS_USDC_CV);
 
     assertEq(queue.getAllYieldSources().length, yieldSourcesLenPre - 1, 'Yield source was not removed from array');
-    (,address sourceSource,,,,) = queue.yieldSources(FAS_USDC_CV);
+    (,address sourceSource,,,) = queue.yieldSources(FAS_USDC_CV);
 
     assertEq(sourceSource, address(0), 'Yield source was not removed');
 
@@ -1250,6 +1245,46 @@ contract TestParetoDollarQueue is Test, DeployScript {
     // user2 funds have a loss proportional to the bad debt.
     assertEq(IERC20Metadata(USDS).balanceOf(user2), amount2 * (totSupply - badDebt) / totSupply, 'user2 bal after claim is wrong');
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 0, 1, 'Total collateral is not correct');
+  }
+
+  function testTotCreditVaultsRequestedScaled() external {
+    address alice = vm.addr(1);
+    address bob = vm.addr(2);
+    uint256 epoch = queue.epochNumber();
+
+    // Alice deposits 100 tokens
+    uint256 amount = 100e6;
+    uint256 minted = _mintUSP(alice, USDC, amount);
+    // manager deposits 100
+    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, 100e6);
+
+    // Alice requests redeem
+    _requestRedeemUSP(alice, minted);
+
+    // update epoch
+    _stopEpoch();
+
+    // Bob deposits 40 tokens
+    _mintUSP(bob, USDC, 40e6);
+
+    // manager request redeem of Alice amount from CV
+    _requestRedeemCV(FAS_USDC_CV, trancheAmount);
+    assertApproxEqAbs(queue.totCreditVaultsRequestedScaled(), 100e18, 1, 'totCreditVaultsRequestedScaled should be updated');
+
+    // manager deposit Bob funds to CV
+    _depositFundsCV(FAS_USDC_CV, 40e6 - 1); // 1 wei for rounding error
+    assertGt(queue.epochPending(epoch), 0, 'epoch pending should not be updated');
+
+    // manager claim requested funds from CV
+    _rollEpochCV(FAS_USDC_CV);
+    _claimRedeemRequestCV(FAS_USDC_CV, epoch);
+    assertApproxEqAbs(queue.totCreditVaultsRequestedScaled(), 0, 1e12, 'totCreditVaultsRequestedScaled should be updated to 0 after claiming all from CVs');
+
+    // alice claims redeem request
+    vm.prank(alice);
+    par.claimRedeemRequest(epoch);
+
+    assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(alice), amount, 1, 'Alice should have the amount redeemed');
   }
 
   function _accountGainsLosses() internal {
