@@ -108,17 +108,16 @@ contract DeployScript is Script, Constants {
     allowedMethods[1] = IParetoDollarQueue.Method(SELL_GEM_SIG, 1);
     queue.addYieldSource(USDS_USDC_PSM, USDC, USDS, 0, allowedMethods, 0);
 
-    // Set keyring params
     par.setKeyringParams(KEYRING_WHITELIST, KEYRING_POLICY);
 
     // Add USDC collateral
-    par.addCollateral(USDC, IERC20Metadata(USDC).decimals(), USDC_FEED, USDC_FEED_DECIMALS, 24 hours);
+    par.addCollateral(USDC, USDC_FEED, 24 hours);
 
     // Add USDT collateral
-    par.addCollateral(USDT, IERC20Metadata(USDT).decimals(), USDT_FEED, USDT_FEED_DECIMALS, 24 hours);
+    par.addCollateral(USDT, USDT_FEED, 24 hours);
 
     // Add USDS collateral
-    par.addCollateral(USDS, IERC20Metadata(USDS).decimals(), USDS_FEED, USDS_FEED_DECIMALS, 24 hours);
+    par.addCollateral(USDS, USDS_FEED, 24 hours);
 
     // transfer ownership of ParetoDollar to TL_MULTISIG
     par.transferOwnership(TL_MULTISIG);

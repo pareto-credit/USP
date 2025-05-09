@@ -24,7 +24,7 @@ import "./ParetoDollarQueue.sol";
 
 /// @title ParetoDollar - A synthetic dollar minted 1:1 against approved collateral tokens
 /// @notice Users can mint ParetoDollar (USP) by depositing supported collateral tokens and redeem USP for collateral tokens.
-/// Minting enforces a minimum collateral price threshold (0.99 USD normalized to 18 decimals) using primary and fallback oracles,
+/// Minting enforces a minimum collateral price threshold (0.995 USD normalized to 18 decimals) using primary oracle,
 /// while redemption does not enforce this check.
 /// Collateral will be deposited in Pareto Credit Vaults to earn yield.
 contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgradeable, EmergencyUtils {
@@ -34,8 +34,8 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// Constants ///
   /////////////////
 
-  /// @notice Minimum acceptable price (normalized to 18 decimals): 0.99 USD.
-  uint256 public constant MIN_PRICE = 99 * 1e16; // 0.99 * 1e18
+  /// @notice Minimum acceptable price (normalized to 18 decimals): 0.995 USD.
+  uint256 public constant MIN_PRICE = 995 * 1e15; // 0.995 * 1e18
   /// @notice Token symbol.
   string public constant SYMBOL = "USP";
   /// @notice Token name.
@@ -213,15 +213,11 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
   /// @dev IMPORTANT: be sure that priceFeed has no min/max answer
   /// @dev This method can be used also to update collateral info by passing the same token address
   /// @param token The collateral token address.
-  /// @param tokenDecimals The decimals for the collateral token.
   /// @param priceFeed The primary oracle address.
-  /// @param priceFeedDecimals The decimals for the primary oracle.
   /// @param validityPeriod The validity period for the oracle price (in seconds).
   function addCollateral(
     address token,
-    uint8 tokenDecimals,
     address priceFeed,
-    uint8 priceFeedDecimals,
     uint256 validityPeriod
   ) external {
     _checkOwner();
@@ -229,6 +225,9 @@ contract ParetoDollar is IParetoDollar, ERC20Upgradeable, ReentrancyGuardUpgrade
     if (token == address(0) || priceFeed == address(0)) revert InvalidData();
     // check if the token is already added
     bool isOverwriting = collateralInfo[token].allowed;
+    uint8 tokenDecimals = IERC20Metadata(token).decimals();
+    // priceFeed is not an ERC20 token, but has the decimals() method
+    uint8 priceFeedDecimals = IERC20Metadata(priceFeed).decimals();
     collateralInfo[token] = CollateralInfo({
       allowed: true,
       priceFeed: priceFeed,
