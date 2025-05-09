@@ -667,6 +667,27 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
     emit YieldSourceAdded(_source, _token);
   }
 
+  /// @notice Update yield source.
+  /// @dev only maxCap and allowed methods can be updated
+  /// @param _source The address of the yield source.
+  /// @param _maxCap The maximum amount that can be deposited in the vault.
+  /// @param _allowedMethods The list of allowed methods to call on the yield source.
+  function updateYieldSource(address _source, uint256 _maxCap, Method[] calldata _allowedMethods) external {
+    _checkOwner();
+    // revert if the token is not in the yield sources
+    if (address(yieldSources[_source].token) == address(0)) {
+      revert YieldSourceInvalid();
+    }
+    // update the max cap and allowed methods
+    yieldSources[_source].maxCap = _maxCap;
+    // update the allowed methods only if param is not empty
+    if (_allowedMethods.length > 0) {
+      yieldSources[_source].allowedMethods = _allowedMethods;
+    }
+
+    emit YieldSourceUpdated(_source, _maxCap);
+  }
+
   /// @notice Remove yield source.
   /// @dev only the owner can call this function. Yield source should be 
   /// removed only when everything is withdrawn from it. If the yield

@@ -45,9 +45,9 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
     // set oracles validityPeriod to 0
     vm.startPrank(par.owner());
-    par.addCollateral(USDC, IERC20Metadata(USDC).decimals(), USDC_FEED, USDC_FEED_DECIMALS, 0);
-    par.addCollateral(USDT, IERC20Metadata(USDT).decimals(), USDT_FEED, USDT_FEED_DECIMALS, 0);
-    par.addCollateral(USDS, IERC20Metadata(USDS).decimals(), USDS_FEED, USDS_FEED_DECIMALS, 0);
+    par.addCollateral(USDC, USDC_FEED, 0);
+    par.addCollateral(USDT, USDT_FEED, 0);
+    par.addCollateral(USDS, USDS_FEED, 0);
     vm.stopPrank();
   
     vm.label(address(sPar),"sUSP");
@@ -1285,6 +1285,30 @@ contract TestParetoDollarQueue is Test, DeployScript {
     par.claimRedeemRequest(epoch);
 
     assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(alice), amount, 1, 'Alice should have the amount redeemed');
+  }
+
+  function testUpdateYieldSource() external {
+    // update yield source
+    vm.prank(queue.owner());
+    queue.updateYieldSource(FAS_USDC_CV, 2000e18, new IParetoDollarQueue.Method[](0));
+
+    ParetoDollarQueue.YieldSource memory source = queue.getYieldSource(FAS_USDC_CV);
+    assertEq(source.maxCap, 2000e18, 'Yield source max cap should be updated');
+    assertGt(source.allowedMethods.length, 0, 'Yield source allowed methods should not be updated');
+
+    IParetoDollarQueue.Method[] memory methods = new IParetoDollarQueue.Method[](1);
+    methods[0] = IParetoDollarQueue.Method({
+      method: DEPOSIT_AA_SIG,
+      methodType: 11
+    });
+    vm.prank(queue.owner());
+    queue.updateYieldSource(FAS_USDC_CV, 2000e18, methods);
+
+    source = queue.getYieldSource(FAS_USDC_CV);
+    assertEq(source.maxCap, 2000e18, 'Yield source max cap should not be updated');
+    assertEq(source.allowedMethods.length, 1, 'Yield source allowed methods length should be 1');
+    assertEq(source.allowedMethods[0].method, DEPOSIT_AA_SIG, 'Yield source first allowed method is not correct');
+    assertEq(source.allowedMethods[0].methodType, 11, 'Yield source first allowed method type is not correct');
   }
 
   function _accountGainsLosses() internal {

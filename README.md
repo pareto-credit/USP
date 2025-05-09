@@ -12,12 +12,18 @@ This repository contains the Pareto Synthetic Dollar contracts:
 
 ## Installing Dependencies
 
-1. Install the dependency using your preferred package manager, e.g. `bun install dependency-name`
-   - Use this syntax to install from GitHub: `bun install github:username/repo-name`
-2. Add a remapping for the dependency in [remappings.txt](./remappings.txt), e.g.
-   `dependency-name=node_modules/dependency-name`
+```sh
+$ bun install
 
-This repo is based on https://github.com/PaulRBerg/foundry-template
+or
+
+$ yarn install
+```
+and
+
+```sh
+$ forge install
+```
 
 ## Usage
 
