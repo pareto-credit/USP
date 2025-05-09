@@ -57,7 +57,7 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(usdcCollateral.allowed, true, 'USDC collateral should be allowed');
     assertEq(usdcCollateral.priceFeed, USDC_FEED, 'USDC priceFeed should be set');
     assertEq(usdcCollateral.tokenDecimals, 6, 'USDC should have 6 decimals');
-    assertEq(usdcCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDC should have 8 decimals');
+    assertEq(usdcCollateral.priceFeedDecimals, 8, 'Price feed for USDC should have 8 decimals');
     assertEq(usdcCollateral.validityPeriod, 24 hours, 'Price feed for USDC should have validityPeriod of 24 hours');
   
     IParetoDollar.CollateralInfo memory usdtCollateral = par.getCollateralInfo(USDT);
@@ -66,7 +66,7 @@ contract TestParetoDollar is Test, DeployScript {
     assertEq(usdtCollateral.allowed, true, 'USDT collateral should be allowed');
     assertEq(usdtCollateral.priceFeed, USDT_FEED, 'USDT priceFeed should be set');
     assertEq(usdtCollateral.tokenDecimals, 6, 'USDT should have 6 decimals');
-    assertEq(usdtCollateral.priceFeedDecimals, USDT_FEED_DECIMALS, 'Price feed for USDT should have 8 decimals');
+    assertEq(usdtCollateral.priceFeedDecimals, 8, 'Price feed for USDT should have 8 decimals');
     assertEq(usdtCollateral.validityPeriod, 24 hours, 'Price feed for USDT should have validityPeriod of 24 hours');
 
     address[] memory collaterals = par.getCollaterals();
