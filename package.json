@@ -27,8 +27,9 @@
   ],
   "private": true,
   "scripts": {
-    "deploy": "forge clean && forge build && forge script ./script/Deploy.s.sol --ledger --broadcast --optimize --optimizer-runs 99999 --verify --sender \"0xe5dab8208c1f4cce15883348b72086dbace3e64b\" --slow -vvv && cp -R out/build-info/* old-build-info",
-    "upgrade": "forge clean && forge build && forge script ./script/Upgrade.s.sol --ledger --broadcast --optimize --optimizer-runs 99999 --verify --sender \"0xe5dab8208c1f4cce15883348b72086dbace3e64b\" --slow -vvv && cp -R out/build-info/* old-build-info",
+    "deploy": "forge clean && forge build && forge script ./script/DeployProd.s.sol --ledger --broadcast --optimize --optimizer-runs 9999 --verify --sender \"0xe5dab8208c1f4cce15883348b72086dbace3e64b\" --slow -vvv && cp -R out/build-info/* old-build-info/mainnet",
+    "deploy-test": "forge clean && forge build && forge script ./script/DeployTest.s.sol --ledger --broadcast --optimize --optimizer-runs 9999 --verify --sender \"0xe5dab8208c1f4cce15883348b72086dbace3e64b\" --slow -vvv && cp -R out/build-info/* old-build-info/optimism",
+    "upgrade": "forge clean && forge build && forge script ./script/Upgrade.s.sol --ledger --broadcast --optimize --optimizer-runs 9999 --verify --sender \"0xe5dab8208c1f4cce15883348b72086dbace3e64b\" --slow --ffi -vvvv && cp -R out/build-info/* old-build-info",
     "clean": "rm -rf cache out",
     "build": "forge build",
     "lint": "bun run lint:sol && bun run prettier:check",
