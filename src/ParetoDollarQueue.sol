@@ -524,9 +524,9 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
       // so we first remove USP from the ParetoDollarStaking contract and then burn them via 
       // ParetoDollar contract
 
-      // we need to check if supply is enough to cover the whole loss
-      uint256 sParSupply = IERC20Metadata(address(sPar)).totalSupply();
-      uint256 burnAmount = uint256(-gain) > sParSupply ? sParSupply : uint256(-gain);
+      // we need to check if staked USP are enough to cover the whole loss
+      uint256 parStaked = IERC20Metadata(address(par)).balanceOf(address(sPar));
+      uint256 burnAmount = uint256(-gain) > parStaked ? parStaked : uint256(-gain);
       sPar.emergencyWithdraw(address(par), burnAmount);
       par.emergencyBurn(burnAmount);
     }
