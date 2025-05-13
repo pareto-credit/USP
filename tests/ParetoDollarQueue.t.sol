@@ -1042,7 +1042,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     _mintUSP(address(this), USDC, amount);
     // we stake only 1M
     _stake(address(this), depositedAmountScaled / 10);    // deposit funds in CV
-    _depositFundsCV(FAS_USDC_CV, amount);
+    uint256 tranches = _depositFundsCV(FAS_USDC_CV, amount);
 
     uint256 collateralValue = queue.getTotalCollateralsScaled();
 
@@ -1051,11 +1051,15 @@ contract TestParetoDollarQueue is Test, DeployScript {
     queue.removeYieldSource(FAS_USDC_CV);
     vm.stopPrank();
 
-    _defaultCV(FAS_USDC_CV);
+    // Default CV
+    _defaultCV(FAS_USDC_CV, tranches / 10);
+    assertGt(queue.totCreditVaultsRequestedScaled(), 0, 'totCreditVaultsRequested should be > 0');
 
-    uint256 yieldSourcesLenPre = queue.getAllYieldSources().length; 
+    uint256 yieldSourcesLenPre = queue.getAllYieldSources().length;
     vm.prank(queue.owner());
     queue.removeYieldSource(FAS_USDC_CV);
+    // tolerance of 1 wei scaled to 18 decimals
+    assertApproxEqAbs(queue.totCreditVaultsRequestedScaled(), 0, 1e12, 'totCreditVaultsRequested should be 0');
 
     assertEq(queue.getAllYieldSources().length, yieldSourcesLenPre - 1, 'Yield source was not removed from array');
     (,address sourceSource,,,) = queue.yieldSources(FAS_USDC_CV);
@@ -1065,16 +1069,12 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertLt(queue.getTotalCollateralsScaled(), collateralValue, 'total collaterals should be updated');
   }
 
-  function _defaultCV(address source) internal {
+  function _defaultCV(address source, uint256 tranches) internal {
     IIdleCDOEpochVariant _vault = IIdleCDOEpochVariant(address(source));
     vm.prank(_vault.owner());
     _vault.setKeyringParams(address(0), 1, false);
-    // deposit and request redeem from CV
-    uint256 amount = 1_000_000e6;
-    _donate(USDC, address(this), amount);
-    IERC20Metadata(USDC).approve(address(_vault), amount);
-    uint256 tranches = _vault.depositAA(amount);
-    _vault.requestWithdraw(tranches, _vault.AATranche());
+
+    _requestRedeemCV(source, tranches);
 
     // start epoch
     _toggleEpochCV(source, true);

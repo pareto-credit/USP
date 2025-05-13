@@ -197,14 +197,22 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   /// @return The total value of the Pareto Credit Vault in this contract.
   function scaledNAVCreditVault(address yieldSource, address vaultToken, IERC20Metadata token) internal view returns (uint256) {
     IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
-    IIdleCreditVault strategy = IIdleCreditVault(cv.strategy());
-
     uint256 decimals = token.decimals();
-    uint256 pending = strategy.withdrawsRequests(address(this)) * 10 ** (18 - decimals);
-    uint256 instantPending = strategy.instantWithdrawsRequests(address(this)) * 10 ** (18 - decimals);
+    uint256 pending = _creditVaultPending(yieldSource) * 10 ** (18 - decimals);
     // tranche balance in this contract (which have 18 decimals) * price (in underlying decimals) / 10 ** underlying decimals
     // we also need to add eventual pending withdraw requests (both normal and instant) as these requests burn tranche tokens
-    return IERC20Metadata(vaultToken).balanceOf(address(this)) * cv.virtualPrice(cv.AATranche()) / (10 ** decimals) + pending + instantPending;
+    return IERC20Metadata(vaultToken).balanceOf(address(this)) * cv.virtualPrice(cv.AATranche()) / (10 ** decimals) + pending;
+  }
+
+  /// @notice Get the total amount of pending withdraw requests for a Pareto Credit Vault.
+  /// @dev returned value is in underlyings decimals (not scaled to 18 decimals)
+  /// @param yieldSource The address of the Pareto Credit Vault.
+  /// @return The total amount of pending withdraw requests.
+  function _creditVaultPending(address yieldSource) internal view returns (uint256) {
+    IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
+    IIdleCreditVault strategy = IIdleCreditVault(cv.strategy());
+
+    return strategy.withdrawsRequests(address(this)) + strategy.instantWithdrawsRequests(address(this));
   }
 
   /// @notice Get the total value in this contract (scaled to 18 decimals) of an ERC4626 vault.
@@ -703,10 +711,20 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
       revert YieldSourceInvalid();
     }
     bool defaulted = _ys.vaultType == 1 && IIdleCDOEpochVariant(_source).defaulted();
+    uint256 ysFunds = getCollateralsYieldSourceScaled(_source);
     // revert if the yield source is not empty, no need to unscale the value
     // if yield source is a defaulted credit vault we skip this check
-    if (getCollateralsYieldSourceScaled(_source) > 0 && !defaulted) {
+    if (ysFunds > 0 && !defaulted) {
       revert YieldSourceNotEmpty();
+    }
+    // if we are removing a defaulted CV and is non-empty we need to reduce
+    // totCreditVaultsRequestedScaled by the amount of pending requests
+    if (defaulted) {
+      uint256 ysPendingScaled = _creditVaultPending(_source) * (10 ** (18 - _ys.token.decimals()));
+      if (ysFunds > 0 && ysPendingScaled > 0) {
+        uint256 _totRequested = totCreditVaultsRequestedScaled;
+        totCreditVaultsRequestedScaled = _totRequested > ysPendingScaled ? _totRequested - ysPendingScaled : 0;
+      }
     }
     // remove allowance for the yield source
     _ys.token.safeDecreaseAllowance(_source, _ys.token.allowance(address(this), _source));
