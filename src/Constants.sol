@@ -5,10 +5,9 @@ contract Constants {
   // MAINNET
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public constant TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
-  
-  // TODO confirm values for keyring whitelist and policy
+  // Keyring whitelist contract and policy id
   address public constant KEYRING_WHITELIST = 0x6351370a1c982780Da2D8c85DfedD421F7193Fa5;
-  uint256 public constant KEYRING_POLICY = 4;
+  uint256 public constant KEYRING_POLICY = 11054401;
   // TODO check address
   address public constant HYPERNATIVE_PAUSER = 0xBaeCba470C229984b75BC860EFe8e97AE082Bb9f;
   // USDC feed data
@@ -20,9 +19,12 @@ contract Constants {
   // USDS feed data
   address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
   address public constant USDS_FEED = 0xfF30586cD0F29eD462364C7e81375FC0C71219b1;
-  // Fas USDT credit vault
+  // Fas USDC credit vault
   address public constant FAS_USDC_CV = 0xf6223C567F21E33e859ED7A045773526E9E3c2D5;
   address public constant AA_FAS_USDC_CV = 0x45054c6753b4Bce40C5d54418DabC20b070F85bE;
+  // Bastion USDC credit vault
+  address public constant BAS_USDC_CV = 0x4462eD748B8F7985A4aC6b538Dfc105Fce2dD165;
+  address public constant AA_BAS_USDC_CV = 0xC49b4ECc14aa31Ef0AD077EdcF53faB4201b724c;
   // sUSDS ERC4626 vault
   address public constant SUSDS = 0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD;
   address public constant USDS_USDC_PSM = 0xA188EEC8F81263234dA3622A406892F3D630f98c;
