@@ -62,4 +62,6 @@ interface IParetoDollarQueue {
   ) external;
   function removeYieldSource(address _source) external;
   function isParetoDollarCollateralized() external view returns (bool);
+  function stopEpoch() external;
+  function accountGainsLosses() external;
 }
