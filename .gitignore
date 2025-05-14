@@ -5,6 +5,7 @@ artifacts
 coverage
 node_modules
 out
+broadcast/ManagerSpells.s.sol/
 
 # files
 *.env
