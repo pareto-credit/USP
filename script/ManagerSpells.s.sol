@@ -50,7 +50,11 @@ contract ManagerSpells is Script, Constants {
     // depositToCV(FAS_USDC_CV, 0); // amount in USDC
     // requestRedeemCV(FAS_USDC_CV, 0); // amount in AA tranches
     // claimRequestCV(FAS_USDC_CV, false); // isInstant
-  
+
+    // Utility spells
+    // stopEpoch();
+    // accountGainsLosses();
+
     vm.stopBroadcast();
   }
 
@@ -192,6 +196,26 @@ contract ManagerSpells is Script, Constants {
     console.log('CV:', source);
 
     _callWhitelistedMethods(sources, methods, args);
+  }
+
+  function stopEpoch() public {
+    if (IS_EOA) {
+      queue.stopEpoch();
+    } else {
+      _multisigTx(
+        abi.encodeCall(IParetoDollarQueue.stopEpoch, ())
+      );
+    }
+  }
+
+  function accountGainsLosses() public {
+    if (IS_EOA) {
+      queue.accountGainsLosses();
+    } else {
+      _multisigTx(
+        abi.encodeCall(IParetoDollarQueue.accountGainsLosses, ())
+      );
+    }
   }
 
   function _multisigTx(bytes memory data) internal {
