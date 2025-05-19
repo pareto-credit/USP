@@ -25,9 +25,21 @@ contract ManagerSpells is Script, Constants {
 
   function run() public {
     vm.createSelectFork(network);
+
+    // Set labels
+    vm.label(USDS, "USDS");
+    vm.label(SUSDS, "sUSDS");
+    vm.label(USDC, "USDC");
+    vm.label(address(par), "USP");
+    vm.label(address(sPar), "SUSP");
+    vm.label(address(queue), "Queue");
+
+    // Print info
     console.log('Using network: ', network);
     console.log('Using multisig: ', !IS_EOA);
-    
+    printInfo();
+
+    // Initialize Safe
     safe.initialize(TL_MULTISIG);
 
     vm.startBroadcast();
@@ -61,7 +73,7 @@ contract ManagerSpells is Script, Constants {
   /// @param amount Amount of USDS to deposit. If 0, will deposit all USDS in the queue.
   function depositToSUSD(uint256 amount) public {
     if (amount == 0) {
-      amount = IERC20Metadata(USDS).balanceOf(address(queue));
+      amount = _maxDepositable(USDS);
     }
 
     address[] memory sources = new address[](1);
@@ -144,7 +156,7 @@ contract ManagerSpells is Script, Constants {
     string memory symbol = token.symbol();
     
     if (amount == 0) {
-      amount = token.balanceOf(address(queue));
+      amount = _maxDepositable(address(token));
     }
 
     address[] memory sources = new address[](1);
@@ -216,6 +228,75 @@ contract ManagerSpells is Script, Constants {
         abi.encodeCall(IParetoDollarQueue.accountGainsLosses, ())
       );
     }
+  }
+
+  /// @dev Prints the current state of the Pareto Dollar system.
+  function printInfo() public view {
+    uint256 epoch = queue.epochNumber();
+    uint256 unlent = queue.getUnlentBalanceScaled();
+    uint256 cvRequests = queue.totCreditVaultsRequestedScaled();
+    uint256 totCollaterals = queue.getTotalCollateralsScaled();
+    uint256 totUSPSupply = par.totalSupply() + queue.totReservedWithdrawals();
+    uint256 prevEpochReqs = _prevEpochsRequests();
+    uint256 maxDepositable = _maxDepositable();
+    int256 gainLosses = int256(totCollaterals) - int256(totUSPSupply);
+    uint256 gain;
+    uint256 loss;
+    if (gainLosses >= 0) {
+      gain = uint256(gainLosses);
+    } else {
+      loss = uint256(-gainLosses);
+    }
+
+    console.log('###################################');
+    console.log('USP Supply:           ', par.totalSupply() / 1e18, '(Without burned but not-yet-redeemed)');
+    console.log('USP Supply real:      ', totUSPSupply / 1e18);
+    console.log('sUSP Supply:          ', sPar.totalSupply() / 1e18);
+    console.log('sUSP Price:           ', sPar.convertToAssets(1e18));
+    console.log('is USP ok:            ', queue.isParetoDollarCollateralized());
+    console.log('');
+    console.log('Collaterals:          ', totCollaterals / 1e18);
+    console.log('Unlent:               ', unlent / 1e18);
+    console.log('Max depositable:      ', maxDepositable / 1e18);
+    console.log('Gain:                 ', gain / 1e18);
+    console.log('Loss:                -', loss / 1e18);
+    console.log('');
+    console.log('Epoch number:         ', epoch);
+    console.log('Curr epoch requests:  ', queue.epochPending(epoch) / 1e18);
+    console.log('Prev epoch pending:   ', queue.epochPending(epoch - 1) / 1e18);
+    console.log('Prev epochs reserved: ', prevEpochReqs / 1e18);
+    console.log('Tot redeem requests:  ', queue.totReservedWithdrawals() / 1e18, '(All epochs)');
+    console.log('');
+    console.log('CVs requests:         ', cvRequests / 1e18);
+    console.log('###################################');
+  }
+
+  /// @dev Returns the maximum amount of a specific collateral that can be deposited in the queue.
+  function _maxDepositable(address collateral) internal view returns (uint256) {
+    IERC20Metadata token = IERC20Metadata(collateral);
+    uint256 decimals = token.decimals();
+    uint256 bal = token.balanceOf(address(queue)) * 10 ** (18 - decimals); // convert to 18 decimals
+    uint256 maxDepositable = _maxDepositable(); // 18 decimals
+    // scale it back to collateral decimals
+    return (bal >= maxDepositable ? maxDepositable : bal) / (10 ** (18 - decimals));
+  }
+
+  /// @dev Returns the maximum amount of collaterals that can be deposited in yield sources, scaled to 18 decimals
+  function _maxDepositable() internal view returns (uint256) {
+    uint256 unlent = queue.getUnlentBalanceScaled();
+    uint256 cvRequests = queue.totCreditVaultsRequestedScaled();
+    uint256 prevEpochReqs = _prevEpochsRequests();
+    uint256 currEpochPending = queue.epochPending(queue.epochNumber());
+
+    if (unlent + cvRequests > prevEpochReqs - currEpochPending) {
+      return unlent + cvRequests - (prevEpochReqs - currEpochPending);
+    }
+    return 0;
+  }
+
+  /// @dev Returns the total reserved for withdrawals from previous epochs.
+  function _prevEpochsRequests() internal view returns (uint256) {
+    return queue.totReservedWithdrawals() - queue.epochPending(queue.epochNumber());
   }
 
   function _multisigTx(bytes memory data) internal {
