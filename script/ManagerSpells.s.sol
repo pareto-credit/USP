@@ -239,6 +239,7 @@ contract ManagerSpells is Script, Constants {
     uint256 totUSPSupply = par.totalSupply() + queue.totReservedWithdrawals();
     uint256 prevEpochReqs = _prevEpochsRequests();
     uint256 maxDepositable = _maxDepositable();
+    IParetoDollarQueue.YieldSource[] memory sources = queue.getAllYieldSources();
     int256 gainLosses = int256(totCollaterals) - int256(totUSPSupply);
     uint256 gain;
     uint256 loss;
@@ -260,6 +261,16 @@ contract ManagerSpells is Script, Constants {
     console.log('Max depositable:      ', maxDepositable / 1e18);
     console.log('Gain:                 ', gain / 1e18);
     console.log('Loss:                -', loss / 1e18);
+    console.log('');
+    console.log('Allocations:');
+    for (uint256 i = 0; i < sources.length; i++) {
+      address source = sources[i].source;
+      uint256 balance = queue.getCollateralsYieldSourceScaled(source) / 1e18;
+      IERC20Metadata vaultToken = IERC20Metadata(sources[i].vaultToken);
+      if (balance > 0) {
+        console.log(balance, sources[i].token.symbol(), vaultToken.symbol());
+      }
+    }
     console.log('');
     console.log('Epoch number:         ', epoch);
     console.log('Curr epoch requests:  ', queue.epochPending(epoch) / 1e18);
