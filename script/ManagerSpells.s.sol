@@ -52,6 +52,7 @@ contract ManagerSpells is Script, Constants {
     // sUSD spells
     // depositToSUSD(0); // amount in USDS
     // redeemFromSUSD(0, 0); // amount in sUSDS, epoch number
+    // withdrawFromSUSD(0, 0); // amount in USDS, epoch number
 
     // Bastion spells
     // depositToCV(BAS_USDC_CV, 0); // amount in USDC
@@ -61,7 +62,7 @@ contract ManagerSpells is Script, Constants {
     // Fasara spells
     // depositToCV(FAS_USDC_CV, 0); // amount in USDC
     // requestRedeemCV(FAS_USDC_CV, 0); // amount in AA tranches
-    // claimRequestCV(FAS_USDC_CV, false); // isInstant
+    // claimRequestCV(FAS_USDC_CV, false, 0); // isInstant, epoch number
 
     // Utility spells
     // stopEpoch();
@@ -105,6 +106,27 @@ contract ManagerSpells is Script, Constants {
     args[0] = abi.encode(amount, address(queue), address(queue));
 
     console.log('Redeeming:', amount / 1e18, 'sUSDS from sUSDS vault');
+    console.log('Epoch number:', _epoch);
+    
+    _redeemFunds(sources, methods, args, _epoch);
+  }
+
+  function withdrawFromSUSD(uint256 amount, uint256 _epoch) public {
+    if (amount == 0) {
+      amount = IERC20Metadata(SUSDS).balanceOf(address(queue));
+    }
+    if (_epoch == 0) {
+      _epoch = queue.epochNumber();
+    }
+
+    address[] memory sources = new address[](1);
+    sources[0] = SUSDS;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = WITHDRAW_4626_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode(amount, address(queue), address(queue));
+
+    console.log('Withdrawing:', amount / 1e18, 'USDS from sUSDS vault');
     console.log('Epoch number:', _epoch);
     
     _redeemFunds(sources, methods, args, _epoch);
@@ -196,7 +218,12 @@ contract ManagerSpells is Script, Constants {
 
   /// @param source Address of the credit vault to claim from.
   /// @param isInstant Whether to claim the instant redeem request or not.
-  function claimRequestCV(address source, bool isInstant) public {
+  /// @param _epoch Epoch number to claim from. If 0, will use the current epoch.
+  function claimRequestCV(address source, bool isInstant, uint256 _epoch) public {
+    if (_epoch == 0) {
+      _epoch = queue.epochNumber();
+    }
+
     address[] memory sources = new address[](1);
     sources[0] = source;
     bytes4[] memory methods = new bytes4[](1);
@@ -207,7 +234,7 @@ contract ManagerSpells is Script, Constants {
     console.log('Claiming redeem request from CV vault, isInstant:', isInstant);
     console.log('CV:', source);
 
-    _callWhitelistedMethods(sources, methods, args);
+    _redeemFunds(sources, methods, args, _epoch);
   }
 
   function stopEpoch() public {
