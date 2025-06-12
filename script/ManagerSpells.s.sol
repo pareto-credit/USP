@@ -66,6 +66,7 @@ contract ManagerSpells is Script, Constants {
 
     // Utility spells
     // stopEpoch();
+    // convertUnlentToRedeemable();
     // accountGainsLosses();
 
     vm.stopBroadcast();
@@ -193,6 +194,16 @@ contract ManagerSpells is Script, Constants {
     _depositFunds(sources, methods, args);
   }
 
+  /// @notice to be called after an epoch ends with some pending redeem request. This will convert 
+  /// any unlent balance (not already reserved for other withdrawals) to redeemable balance.
+  function convertUnlentToRedeemable() public {
+    console.log('Max depositable:', _maxDepositable() / 1e18);
+    console.log('Prev epoch pending:', queue.epochPending(queue.epochNumber() - 1) / 1e18);
+    // We pass empty arrays to simply update epochPending[epoch - 1] with the current unlent balance.
+    _depositFunds(new address[](0), new bytes4[](0), new bytes[](0));
+    console.log('Epoch pending after deposit:', queue.epochPending(queue.epochNumber() - 1) / 1e18);
+  }
+
   /// @param source Address of the credit vault to redeem from.
   /// @param trancheAmount Amount of AA tranches to redeem. If 0, will request to redeem all AA tranches in the queue.
   function requestRedeemCV(address source, uint256 trancheAmount) public {
@@ -245,6 +256,7 @@ contract ManagerSpells is Script, Constants {
         abi.encodeCall(IParetoDollarQueue.stopEpoch, ())
       );
     }
+    console.log('New epoch started:', queue.epochNumber());
   }
 
   function accountGainsLosses() public {
@@ -277,8 +289,8 @@ contract ManagerSpells is Script, Constants {
     }
 
     console.log('###################################');
-    console.log('USP Supply:           ', par.totalSupply() / 1e18, '(Without burned but not-yet-redeemed)');
-    console.log('USP Supply real:      ', totUSPSupply / 1e18);
+    console.log('USP totalSupply:      ', par.totalSupply() / 1e18);
+    console.log('USP Supply real:      ', totUSPSupply / 1e18, '(With burned but not-yet-redeemed)');
     console.log('sUSP Supply:          ', sPar.totalSupply() / 1e18);
     console.log('sUSP Price:           ', sPar.convertToAssets(1e18));
     console.log('is USP ok:            ', queue.isParetoDollarCollateralized());
@@ -324,10 +336,9 @@ contract ManagerSpells is Script, Constants {
     uint256 unlent = queue.getUnlentBalanceScaled();
     uint256 cvRequests = queue.totCreditVaultsRequestedScaled();
     uint256 prevEpochReqs = _prevEpochsRequests();
-    uint256 currEpochPending = queue.epochPending(queue.epochNumber());
 
-    if (unlent + cvRequests > prevEpochReqs - currEpochPending) {
-      return unlent + cvRequests - (prevEpochReqs - currEpochPending);
+    if (unlent + cvRequests > prevEpochReqs) {
+      return unlent + cvRequests - prevEpochReqs;
     }
     return 0;
   }
