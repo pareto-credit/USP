@@ -6,7 +6,7 @@ contract Constants {
   address public constant DEPLOYER = 0xE5Dab8208c1F4cce15883348B72086dBace3e64B;
   address public constant TL_MULTISIG = 0xFb3bD022D5DAcF95eE28a6B07825D4Ff9C5b3814;
   // Keyring whitelist contract and policy id
-  address public constant KEYRING_WHITELIST = 0x6351370a1c982780Da2D8c85DfedD421F7193Fa5;
+  address public constant KEYRING_WHITELIST = 0x6a6A91c7c7C05f9f6B8bC9F6e5eA231e460450e3;
   uint256 public constant KEYRING_POLICY = 11054401;
   // Hypernative pauser multisig
   address public constant HYPERNATIVE_PAUSER = 0xBaeCba470C229984b75BC860EFe8e97AE082Bb9f;
