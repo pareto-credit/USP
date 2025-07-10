@@ -46,8 +46,8 @@ contract ManagerSpells is Script, Constants {
     // Choose the proper spell here:
 
     // PSM spells
-    // sellUSDCPSM(0); // amount in USDC
-    // buyUSDCPSM(0); // amount in USDC
+    // sellUSDCPSM(0); // amount in USDC (6 decimals)
+    // buyUSDCPSM(0); // amount in USDS (18 decimals)
 
     // sUSD spells
     // depositToSUSD(0); // amount in USDS
@@ -296,6 +296,7 @@ contract ManagerSpells is Script, Constants {
     console.log('is USP ok:            ', queue.isParetoDollarCollateralized());
     console.log('');
     console.log('Collaterals:          ', totCollaterals / 1e18);
+    console.log('Collateralization:    ', totCollaterals * 1e18 / totUSPSupply);
     console.log('Unlent:               ', unlent / 1e18);
     console.log('Max depositable:      ', maxDepositable / 1e18);
     console.log('Gain:                 ', gain / 1e18);
