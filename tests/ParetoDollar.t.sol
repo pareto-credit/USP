@@ -24,7 +24,7 @@ contract TestParetoDollar is Test, DeployScript {
   ParetoDollarQueue queue;
 
   function setUp() public virtual {
-    vm.createSelectFork("mainnet", 21836743);
+    vm.createSelectFork("mainnet", 23068980);
 
     vm.startPrank(DEPLOYER);
     (par,,queue) = _deploy(false);

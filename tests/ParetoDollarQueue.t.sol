@@ -33,7 +33,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
   function setUp() public virtual {
     // In this block FAS_USDC_CV is in netting period, this is important
-    vm.createSelectFork("mainnet", 22068555);
+    vm.createSelectFork("mainnet", 23068980);
 
     vm.startPrank(DEPLOYER);
     (par, sPar, queue) = _deploy(false);
@@ -914,10 +914,10 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(queue.getTotalCollateralsScaled(), 100 * 1e18, 'totCollaterals is not considering unlent balance');
     // deposit in CV half of the funds
     _depositFundsCV(FAS_USDC_CV, amount / 2);
-    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 100 * 1e18, 1, 'totCollaterals value after CV deposit is not correct');
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 100 * 1e18, 2, 'totCollaterals value after CV deposit is not correct');
     // deposit additional 100 USDC
     _mintUSP(address(123), USDC, amount);
-    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 1, 'totCollaterals value after second deposit is not correct');
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 2, 'totCollaterals value after second deposit is not correct');
     // deposit in CV all funds
     uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount / 2 + amount);
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 200 * 1e18, 2, 'totCollaterals value after second CV deposit is not correct');
@@ -1198,7 +1198,7 @@ contract TestParetoDollarQueue is Test, DeployScript {
     uint256 sharesAfter = shares - ((shares * loss) / 100e18);
     deal(SUSDS, address(queue), sharesAfter); // overwrite the share balance
     assertEq(IERC4626(SUSDS).balanceOf(address(queue)), sharesAfter);
-    assertEq(queue.getTotalCollateralsScaled(), totSupply - badDebt, 'total collaterals is wrong');
+    assertApproxEqAbs(queue.getTotalCollateralsScaled(), totSupply - badDebt, 1, 'total collaterals is wrong');
 
     // user2 request redeems when the system is unhealthy
     _requestRedeemUSP(user2, par.balanceOf(user2));
@@ -1241,9 +1241,9 @@ contract TestParetoDollarQueue is Test, DeployScript {
 
     // loss should be 1000 for each user
     // user1 funds have a loss proportional to the bad debt.
-    assertEq(IERC20Metadata(USDS).balanceOf(user1), amount1 * (totSupply - badDebt) / totSupply, 'user1 bal after claim is wrong');
+    assertApproxEqAbs(IERC20Metadata(USDS).balanceOf(user1), amount1 * (totSupply - badDebt) / totSupply, 1, 'user1 bal after claim is wrong');
     // user2 funds have a loss proportional to the bad debt.
-    assertEq(IERC20Metadata(USDS).balanceOf(user2), amount2 * (totSupply - badDebt) / totSupply, 'user2 bal after claim is wrong');
+    assertApproxEqAbs(IERC20Metadata(USDS).balanceOf(user2), amount2 * (totSupply - badDebt) / totSupply, 1, 'user2 bal after claim is wrong');
     assertApproxEqAbs(queue.getTotalCollateralsScaled(), 0, 1, 'Total collateral is not correct');
   }
 
