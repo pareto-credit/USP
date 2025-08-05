@@ -6,14 +6,16 @@ import { console } from "forge-std/console.sol";
 import { Upgrades } from "@openzeppelin/foundry-upgrades/Upgrades.sol";
 import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { ParetoDollar } from "../src/ParetoDollar.sol";
+import { BalancerArb } from "../src/BalancerArb.sol";
 import { ParetoDollarStaking } from "../src/ParetoDollarStaking.sol";
 import { ParetoDollarQueue, IParetoDollarQueue } from "../src/ParetoDollarQueue.sol";
 import { Constants } from "../src/Constants.sol";
+import { Addresses } from "../src/Addresses.sol";
 import { IHypernativeModule } from "../src/interfaces/IHypernativeModule.sol";
 import { IIdleCDOEpochVariant } from "../src/interfaces/IIdleCDOEpochVariant.sol";
 import { Safe } from "safe-utils/Safe.sol";
 
-contract ManagerSpells is Script, Constants {
+contract ManagerSpells is Script, Constants, Addresses {
   using Safe for *;
 
   Safe.Client safe;
@@ -68,6 +70,7 @@ contract ManagerSpells is Script, Constants {
     // stopEpoch();
     // convertUnlentToRedeemable();
     // accountGainsLosses();
+    // arbBalancer();
 
     vm.stopBroadcast();
   }
@@ -267,6 +270,14 @@ contract ManagerSpells is Script, Constants {
         abi.encodeCall(IParetoDollarQueue.accountGainsLosses, ())
       );
     }
+  }
+
+  function arbBalancer() public {
+    uint256 tlBalPre = IERC20Metadata(USDC).balanceOf(TL_MULTISIG);
+    // Call the Balancer arbitrage function
+    BalancerArb(Addresses.BALANCER_ARB).arb(0);
+    uint256 tlBalPost = IERC20Metadata(USDC).balanceOf(TL_MULTISIG);
+    console.log('Gain', (tlBalPost - tlBalPre) / 1e6, 'USDC');
   }
 
   /// @dev Prints the current state of the Pareto Dollar system.
