@@ -383,6 +383,40 @@ contract TestParetoDollarStaking is Test, DeployScript {
     assertEq(sPar.rewards(), 0, 'Unvested rewards should be 0');
   }
 
+  function testEmergencyWithdrawShouldNotUnlockRewards() external {
+    vm.prank(sPar.owner());
+    sPar.updateFeeParams(0, address(this));
+
+    uint256 depositAmount = 1e18;
+    uint256 rewardAmount = 1e18;
+
+    _mintUSP(address(this), 1e6);
+    _stake(address(this), depositAmount);
+    depositRewards(rewardAmount);
+
+    uint256 vesting = sPar.rewardsVesting();
+    uint256 elapsed = vesting / 2;
+    skip(elapsed);
+
+    deal(USDC, address(sPar), 200);
+    vm.prank(sPar.owner());
+    sPar.emergencyWithdraw(USDC, 100);
+    assertEq(sPar.rewards(), rewardAmount, 'Unvested rewards should be unchanged');
+
+    uint256 totalAssetsBefore = sPar.totalAssets();
+    uint256 rewardsBefore = sPar.rewards();
+    uint256 unvestedBefore = rewardsBefore - (rewardsBefore * elapsed / vesting);
+    uint256 loss = (unvestedBefore * 3) / 5;
+
+    assertGt(loss, 0, 'loss should be > 0');
+    assertLt(loss, unvestedBefore, 'loss should be less than unvested rewards');
+
+    vm.prank(address(queue));
+    sPar.emergencyWithdraw(address(par), loss);
+
+    assertEq(sPar.totalAssets(), totalAssetsBefore, 'totalAssets mismatch');
+  }
+
   function _mintUSP(address _who, uint256 _amount) internal {
     vm.prank(par.owner());
     par.setKeyringParams(address(0), 1);

@@ -216,9 +216,14 @@ contract ParetoDollarStaking is ERC20Upgradeable, ERC4626Upgradeable, EmergencyU
       revert NotAllowed();
     }
 
-    // first apply loss to unvested rewards if any
-    uint256 unvested = _getUnvestedRewards();
-    rewards = amount < unvested ? unvested - amount : 0;
+    if (token == asset()) {
+      // if withdrawing the staked token, adjust rewards accordingly
+      // first apply loss to unvested rewards if any
+      uint256 unvested = _getUnvestedRewards();
+      rewards = amount < unvested ? unvested - amount : 0;
+      // reset last deposit timestamp to now, this will start a new vesting period for remaining rewards
+      rewardsLastDeposit = block.timestamp;
+    }
 
     IERC20(token).safeTransfer(msg.sender, amount);
   }
