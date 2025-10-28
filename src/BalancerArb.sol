@@ -77,7 +77,8 @@ interface IPermit2 {
  * @author Bugduino + Gemini
  * @notice Performs arbitrage by taking a Balancer V3 flash loan, minting USP,
  * selling the USP for waEthUSDC, unwrapping it to USDC via ERC4626 redeem, 
- * repaying the loan, and banking the profit.
+ * repaying the loan, and banking the profit. This contract must be whitelisted in Keyring
+ * in order to interact with the USP contract.
  */
 contract BalancerArb is IFlashLoanRecipient {
   //------------------------------------------------------------------------------
