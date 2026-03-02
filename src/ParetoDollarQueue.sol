@@ -211,8 +211,19 @@ contract ParetoDollarQueue is IParetoDollarQueue, EmergencyUtils, Constants {
   function _creditVaultPending(address yieldSource) internal view returns (uint256) {
     IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(yieldSource);
     IIdleCreditVault strategy = IIdleCreditVault(cv.strategy());
+    uint256 pending = strategy.withdrawsRequests(address(this)) + strategy.instantWithdrawsRequests(address(this));
+    // Backward-compatible support for APR=0 requests tracked in apr0Users on upgraded strategies.
+    // Old strategies without this method will revert and be ignored.
+    try strategy.apr0Users(address(this)) returns (
+      uint256 principal,
+      uint256, // firstInstallmentNum
+      uint256 settledPrincipal,
+      uint256 settledInterest
+    ) {
+      pending += principal + settledPrincipal + settledInterest;
+    } catch {}
 
-    return strategy.withdrawsRequests(address(this)) + strategy.instantWithdrawsRequests(address(this));
+    return pending;
   }
 
   /// @notice Get the total value in this contract (scaled to 18 decimals) of an ERC4626 vault.
