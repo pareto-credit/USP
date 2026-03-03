@@ -86,6 +86,44 @@ contract TestParetoDollarQueueLiveRegression is Test, Constants, Addresses {
     assertTrue(queue.isParetoDollarCollateralized(), "settledPrincipal+settledInterest should be counted");
   }
 
+  function testFasanaraApr0ClaimKeepsAccountingHealthyAfterQueueUpgrade() external {
+    IIdleCDOEpochVariant cv = IIdleCDOEpochVariant(FAS_USDC_CV);
+    IIdleCreditVault strategy = IIdleCreditVault(cv.strategy());
+    ParetoDollarQueue queue = ParetoDollarQueue(QUEUE);
+    IERC20Metadata token = IERC20Metadata(cv.token());
+
+    uint256 pendingBeforeUpgrade = _creditVaultPendingLikeQueue(strategy);
+    assertGt(pendingBeforeUpgrade, 0, "expected live pending credit vault withdrawals");
+    assertFalse(queue.isParetoDollarCollateralized(), "pre-upgrade queue should be undercollateralized");
+
+    _upgradeQueueProxyToCurrentImplementation();
+    assertTrue(queue.isParetoDollarCollateralized(), "post-upgrade queue should be collateralized");
+
+    // Process one full CV epoch so pending requests are claimable.
+    _rollEpochCV(FAS_USDC_CV, EPOCH_INTEREST_OVERRIDE);
+
+    uint256 totalBeforeClaim = queue.getTotalCollateralsScaled();
+    uint256 pendingBeforeClaim = _creditVaultPendingLikeQueue(strategy);
+    uint256 queueBalBeforeClaim = token.balanceOf(QUEUE);
+
+    _claimRedeemRequestCV(FAS_USDC_CV, queue.epochNumber());
+
+    uint256 totalAfterClaim = queue.getTotalCollateralsScaled();
+    uint256 pendingAfterClaim = _creditVaultPendingLikeQueue(strategy);
+    uint256 queueBalAfterClaim = token.balanceOf(QUEUE);
+
+    assertGt(queueBalAfterClaim, queueBalBeforeClaim, "queue should receive claimed underlying");
+    assertLt(pendingAfterClaim, pendingBeforeClaim, "pending should decrease after claim");
+
+    // Accounting invariant around claim:
+    // total collaterals delta = queue underlying balance delta - pending requests delta (both scaled to 18 decimals).
+    uint256 queueDeltaScaled = (queueBalAfterClaim - queueBalBeforeClaim) * 1e12;
+    uint256 pendingDeltaScaled = (pendingBeforeClaim - pendingAfterClaim) * 1e12;
+    uint256 expectedTotalAfterClaim = totalBeforeClaim + queueDeltaScaled - pendingDeltaScaled;
+    assertApproxEqAbs(totalAfterClaim, expectedTotalAfterClaim, queue.THRESHOLD(), "claim should keep collateral accounting coherent");
+    assertTrue(queue.isParetoDollarCollateralized(), "queue should remain collateralized after claim");
+  }
+
   function _upgradeQueueProxyToCurrentImplementation() internal {
     ParetoDollarQueue impl = new ParetoDollarQueue();
     vm.store(QUEUE, IMPLEMENTATION_SLOT, bytes32(uint256(uint160(address(impl)))));
@@ -100,6 +138,17 @@ contract TestParetoDollarQueueLiveRegression is Test, Constants, Addresses {
     args[0] = abi.encode(trancheAmount, IIdleCDOEpochVariant(source).AATranche());
     vm.prank(TL_MULTISIG);
     ParetoDollarQueue(QUEUE).callWhitelistedMethods(sources, methods, args);
+  }
+
+  function _claimRedeemRequestCV(address source, uint256 epoch) internal {
+    address[] memory sources = new address[](1);
+    sources[0] = source;
+    bytes4[] memory methods = new bytes4[](1);
+    methods[0] = CLAIM_REQ_SIG;
+    bytes[] memory args = new bytes[](1);
+    args[0] = abi.encode();
+    vm.prank(TL_MULTISIG);
+    ParetoDollarQueue(QUEUE).redeemFunds(sources, methods, args, epoch);
   }
 
   function _rollEpochCV(address source, uint256 interestOverride) internal {
@@ -125,5 +174,11 @@ contract TestParetoDollarQueueLiveRegression is Test, Constants, Addresses {
     vm.warp(vault.epochEndDate() + 1);
     vm.prank(manager);
     vault.stopEpoch(unscaledApr, interestOverride);
+  }
+
+  function _creditVaultPendingLikeQueue(IIdleCreditVault strategy) internal view returns (uint256 pending) {
+    pending = strategy.withdrawsRequests(QUEUE) + strategy.instantWithdrawsRequests(QUEUE);
+    (uint256 principal,,uint256 settledPrincipal,uint256 settledInterest) = strategy.apr0Users(QUEUE);
+    pending += principal + settledPrincipal + settledInterest;
   }
 }
